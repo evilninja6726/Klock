@@ -1,0 +1,15 @@
+.gradle/
+.DS_Store
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+*.keystore
+*.jks
+captures/
+.externalNativeBuild/
+.cxx/
+graphify-out/.graphify_python
+graphify-out/.graphify_root
+graphify-out/cache/

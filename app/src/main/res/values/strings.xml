@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Klock</string>
+    <string name="alarm_channel_name">Active Alarms</string>
+    <string name="alarm_channel_description">Critical alarm audio and lock-screen question dismissal</string>
+</resources>

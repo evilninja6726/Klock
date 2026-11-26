@@ -1,0 +1,30 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Horological dial frame -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#F2F0EA"
+        android:strokeWidth="3.5"
+        android:pathData="M30,28 L78,28 C80.2,28 82,29.8 82,32 L82,76 C82,78.2 80.2,80 78,80 L30,80 C27.8,80 26,78.2 26,76 L26,32 C26,29.8 27.8,28 30,28 Z" />
+    <!-- Hour and minute hands -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#F2F0EA"
+        android:strokeWidth="4"
+        android:strokeLineCap="square"
+        android:pathData="M54,54 L54,37 M54,54 L67,54" />
+    <!-- Braun signal orange lock pip -->
+    <path
+        android:fillColor="#EE6332"
+        android:pathData="M50,50 h8 v8 h-8 z" />
+    <!-- Five bottom lock pips -->
+    <path
+        android:fillColor="#EE6332"
+        android:pathData="M33,70 h6 v4 h-6 z M42,70 h6 v4 h-6 z M51,70 h6 v4 h-6 z" />
+    <path
+        android:fillColor="#6E6B64"
+        android:pathData="M60,70 h6 v4 h-6 z M69,70 h6 v4 h-6 z" />
+</vector>

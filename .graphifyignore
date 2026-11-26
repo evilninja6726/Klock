@@ -1,0 +1,8 @@
+.agents/
+.gradle/
+build/
+app/build/
+gradle/
+gradlew
+gradlew.bat
+app/schemas/
