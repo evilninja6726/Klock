@@ -1,44 +1,45 @@
 package com.klock.app.questions.adaptive
 
-import com.klock.app.domain.model.CategoryPerformanceStat
 import com.klock.app.domain.model.DifficultyPreset
-import com.klock.app.domain.model.QuestionCategory
 import com.klock.app.domain.model.QuestionDifficulty
+import com.klock.app.domain.model.TopicConfig
+import com.klock.app.domain.model.TopicPerformanceStat
 import kotlin.random.Random
 
 data class QuestionSlotPlan(
     val slotIndex: Int,
-    val category: QuestionCategory,
+    val topic: TopicConfig,
+    val subtopicName: String?,
     val difficulty: QuestionDifficulty
 )
 
 /**
- * Plans the 5 question slots for an alarm trigger:
- * 1. Distributes categories intelligently across all user-selected categories (avoiding monotony,
- *    rotating under-practiced and weaker categories into active practice).
- * 2. Applies default progression (1: Easy -> 2: Easy/Medium -> 3: Medium -> 4: Medium/Hard -> 5: Hard)
- *    for ADAPTIVE mode and modulates difficulty using historical first-try accuracy.
+ * Plans question slots across arbitrary user-configured [TopicConfig]s and their [TopicConfig.activeSubtopics],
+ * scaling smoothly from 1 to 100 questions.
  */
 class AdaptivePlanner(
     private val random: Random = Random.Default
 ) {
 
     fun buildPlan(
-        selectedCategories: Set<QuestionCategory>,
+        topics: List<TopicConfig>,
         preset: DifficultyPreset,
         count: Int = 5,
-        stats: Map<QuestionCategory, CategoryPerformanceStat> = emptyMap(),
+        stats: Map<String, TopicPerformanceStat> = emptyMap(),
+        startSlotIndex: Int = 0,
+        totalSessionCount: Int = count,
         nowMillis: Long = System.currentTimeMillis()
     ): List<QuestionSlotPlan> {
         if (count <= 0) return emptyList()
-        val pool = selectedCategories.ifEmpty { QuestionCategory.ALL }.toList()
-        val baseDifficulties = preset.baseProgression(count)
+        val activePool = topics.filter { it.enabled && it.name.isNotBlank() }
+            .ifEmpty { TopicRecommender.recommendTopics("") }
 
-        // Score each category: lower first-try accuracy and longer time since last asked get higher priority
-        val scoredCategories = pool.map { cat ->
-            val stat = stats[cat]
+        val fullDifficulties = preset.baseProgression(totalSessionCount.coerceAtLeast(count + startSlotIndex))
+
+        val scoredTopics = activePool.map { topic ->
+            val stat = stats[topic.id]
             val weaknessBoost = if (stat == null || stat.totalSolved == 0) {
-                0.35 // Unexplored category boost
+                0.35
             } else {
                 (1.0 - stat.firstTryAccuracy).coerceIn(0.05, 0.85)
             }
@@ -50,34 +51,45 @@ class AdaptivePlanner(
             }
             val recencyFactor = (hoursSinceAsked / 72.0) * 0.45
             val jitter = random.nextDouble(0.0, 0.20)
-            cat to (weaknessBoost + recencyFactor + jitter)
+            topic to (weaknessBoost + recencyFactor + jitter)
         }.sortedByDescending { it.second }.map { it.first }
 
-        // Select distinct categories first up to pool.size, then cycle if count > pool.size
-        val chosenCategories = List(count) { idx ->
-            scoredCategories[idx % scoredCategories.size]
-        }
-
-        // Order slot 0 with a comfortable/higher-accuracy category for smooth wake-up, escalating to weakest
-        val orderedCategories = if (preset == DifficultyPreset.ADAPTIVE && chosenCategories.size > 1) {
-            chosenCategories.sortedByDescending { cat ->
-                stats[cat]?.firstTryAccuracy ?: 0.65
-            }
+        val orderedTopics = if (preset == DifficultyPreset.ADAPTIVE && scoredTopics.size > 1) {
+            scoredTopics.sortedByDescending { t -> stats[t.id]?.firstTryAccuracy ?: 0.65 }
         } else {
-            chosenCategories
+            scoredTopics
         }
 
-        return List(count) { idx ->
-            val category = orderedCategories[idx]
-            val baseDiff = baseDifficulties[idx]
+        val subtopicCounters = mutableMapOf<String, Int>()
+
+        return List(count) { offset ->
+            val globalIdx = startSlotIndex + offset
+            val topic = orderedTopics[globalIdx % orderedTopics.size]
+            val subtopics = topic.activeSubtopics
+            val chosenSubtopic = if (subtopics.isEmpty()) {
+                null
+            } else {
+                val turn = subtopicCounters.getOrDefault(topic.id, globalIdx / orderedTopics.size)
+                subtopicCounters[topic.id] = turn + 1
+                subtopics[turn % subtopics.size]
+            }
+
+            val baseDiff = fullDifficulties.getOrElse(globalIdx) { QuestionDifficulty.MEDIUM }
             val tunedDiff = if (preset == DifficultyPreset.ADAPTIVE) {
-                tuneAdaptiveDifficulty(baseDiff, stats[category], slotIndex = idx, totalSlots = count)
+                tuneAdaptiveDifficulty(
+                    base = baseDiff,
+                    stat = stats[topic.id],
+                    slotIndex = globalIdx,
+                    totalSlots = totalSessionCount
+                )
             } else {
                 baseDiff
             }
+
             QuestionSlotPlan(
-                slotIndex = idx,
-                category = category,
+                slotIndex = globalIdx,
+                topic = topic,
+                subtopicName = chosenSubtopic,
                 difficulty = tunedDiff
             )
         }
@@ -85,12 +97,11 @@ class AdaptivePlanner(
 
     private fun tuneAdaptiveDifficulty(
         base: QuestionDifficulty,
-        stat: CategoryPerformanceStat?,
+        stat: TopicPerformanceStat?,
         slotIndex: Int,
         totalSlots: Int
     ): QuestionDifficulty {
         if (stat == null || stat.totalSolved < 3) return base
-        // Keep slot 0 accessible (never shift above MEDIUM on wake-up question 1)
         return when {
             stat.firstTryAccuracy >= 0.85 -> {
                 val bumped = base.shifted(+1)
@@ -102,7 +113,6 @@ class AdaptivePlanner(
             }
             stat.firstTryAccuracy < 0.42 -> {
                 val eased = base.shifted(-1)
-                // Keep final question at least MEDIUM even when easing
                 if (slotIndex == totalSlots - 1 && eased.rank < QuestionDifficulty.MEDIUM.rank) {
                     QuestionDifficulty.MEDIUM
                 } else {

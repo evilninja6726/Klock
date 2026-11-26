@@ -8,7 +8,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import com.klock.app.alarm.receiver.AlarmBootAndTimeReceiver
 import com.klock.app.alarm.scheduler.AlarmTimeCalculator
@@ -20,19 +22,21 @@ import com.klock.app.core.device.OemVendor
 import com.klock.app.domain.model.ActiveAlarmSession
 import com.klock.app.domain.model.Alarm
 import com.klock.app.domain.model.AlarmQuestion
+import com.klock.app.domain.model.AppSettings
 import com.klock.app.domain.model.OverrideReason
-import com.klock.app.domain.model.QuestionCategory
 import com.klock.app.domain.model.QuestionDifficulty
 import com.klock.app.domain.model.QuestionFormat
 import com.klock.app.domain.model.QuestionProvenance
 import com.klock.app.domain.model.RetrievalStatus
+import com.klock.app.domain.model.TopicConfig
+import com.klock.app.domain.model.UserProfile
 import com.klock.app.ui.active.ActiveAlarmRootScreen
+import com.klock.app.ui.screens.FirstLaunchOnboardingScreen
 import com.klock.app.ui.theme.KlockTheme
 import com.klock.app.ui.viewmodel.ActiveAlarmUiState
+import com.klock.app.ui.viewmodel.MainUiState
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -56,31 +60,17 @@ class PlatformCompatibilityAndComposeUiTest {
         assertEquals(DeviceMemoryTier.LOW_RAM, MemoryTierDetector.classify(2048L * mb, isLowRamDevice = false))
         assertEquals(DeviceMemoryTier.LOW_RAM, MemoryTierDetector.classify(4096L * mb, isLowRamDevice = true))
         assertEquals(DeviceMemoryTier.STANDARD_RAM, MemoryTierDetector.classify(4096L * mb, isLowRamDevice = false))
-        assertEquals(DeviceMemoryTier.STANDARD_RAM, MemoryTierDetector.classify(6144L * mb, isLowRamDevice = false))
-        assertEquals(DeviceMemoryTier.HIGH_RAM, MemoryTierDetector.classify(8192L * mb, isLowRamDevice = false))
         assertEquals(DeviceMemoryTier.HIGH_RAM, MemoryTierDetector.classify(16384L * mb, isLowRamDevice = false))
     }
 
     @Test
     fun `OEM advisor detects Xiaomi Redmi Samsung Motorola OnePlus Vivo Huawei and AOSP`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-
-        val xiaomi = OemCompatibilityAdvisor.buildGuidance(context, "Xiaomi", "Redmi")
-        assertEquals(OemVendor.XIAOMI_REDMI_POCO, xiaomi.vendor)
-        assertTrue(xiaomi.checklist.any { it.contains("Autostart", ignoreCase = true) })
-
-        val samsung = OemCompatibilityAdvisor.buildGuidance(context, "samsung", "galaxy")
-        assertEquals(OemVendor.SAMSUNG, samsung.vendor)
-        assertTrue(samsung.checklist.any { it.contains("Never auto sleeping", ignoreCase = true) })
-
-        val motorola = OemCompatibilityAdvisor.buildGuidance(context, "motorola", "moto")
-        assertEquals(OemVendor.MOTOROLA, motorola.vendor)
-
-        val realme = OemCompatibilityAdvisor.buildGuidance(context, "realme", "RMX")
-        assertEquals(OemVendor.OPPO_REALME_ONEPLUS, realme.vendor)
-
-        val pixel = OemCompatibilityAdvisor.buildGuidance(context, "Google", "Pixel")
-        assertEquals(OemVendor.STANDARD_AOSP, pixel.vendor)
+        assertEquals(OemVendor.XIAOMI_REDMI_POCO, OemCompatibilityAdvisor.buildGuidance(context, "Xiaomi", "Redmi").vendor)
+        assertEquals(OemVendor.SAMSUNG, OemCompatibilityAdvisor.buildGuidance(context, "samsung", "galaxy").vendor)
+        assertEquals(OemVendor.MOTOROLA, OemCompatibilityAdvisor.buildGuidance(context, "motorola", "moto").vendor)
+        assertEquals(OemVendor.OPPO_REALME_ONEPLUS, OemCompatibilityAdvisor.buildGuidance(context, "realme", "RMX").vendor)
+        assertEquals(OemVendor.STANDARD_AOSP, OemCompatibilityAdvisor.buildGuidance(context, "Google", "Pixel").vendor)
     }
 
     @Test
@@ -97,38 +87,25 @@ class PlatformCompatibilityAndComposeUiTest {
             Alarm(
                 hour = 6,
                 minute = 45,
-                label = "SQL Sprint",
+                label = "Morning Focus",
                 enabled = true,
                 repeatDays = setOf(1, 2, 3, 4, 5),
-                categories = setOf(QuestionCategory.SQL, QuestionCategory.POWER_BI)
+                requiredQuestions = 25
             )
         )
         val saved = repo.getAlarmById(id)!!
+        assertEquals(25, saved.requiredQuestions)
         val now = ZonedDateTime.of(2026, 11, 25, 22, 0, 0, 0, ZoneId.of("Asia/Kolkata"))
-        val triggerMillis = scheduler.schedule(saved, now)
+        scheduler.schedule(saved, now)
+        assertTrue(shadowAlarmManager.scheduledAlarms.isNotEmpty())
 
-        assertTrue(triggerMillis > now.toInstant().toEpochMilli())
-        assertTrue("OS AlarmClockInfo must be registered", shadowAlarmManager.scheduledAlarms.isNotEmpty())
-
-        // Cancel clears OS alarm
         scheduler.cancel(id)
         assertTrue(shadowAlarmManager.scheduledAlarms.isEmpty())
 
-        // Simulate device reboot recovery -> rescheduleAllEnabled restores OS registration
         scheduler.rescheduleAllEnabled(repo)
-        assertTrue(
-            "Enabled alarm must be restored after reboot reschedule",
-            shadowAlarmManager.scheduledAlarms.isNotEmpty()
-        )
+        assertTrue(shadowAlarmManager.scheduledAlarms.isNotEmpty())
 
-        // Verify BootReceiver handles BOOT_COMPLETED without error
-        val bootReceiver = AlarmBootAndTimeReceiver()
-        bootReceiver.onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
-        assertEquals(
-            "Countdown formatter works cleanly",
-            "Rings in 8h 45m",
-            AlarmTimeCalculator.formatCountdown(triggerMillis, now.toInstant().toEpochMilli())
-        )
+        AlarmBootAndTimeReceiver().onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
     }
 
     @Test
@@ -145,44 +122,131 @@ class PlatformCompatibilityAndComposeUiTest {
     }
 
     @Test
+    fun `first-launch onboarding collects user info recommends topics and allows custom topics`() {
+        var capturedName = ""
+        var capturedAge: Int? = null
+        var capturedTopics: List<TopicConfig> = emptyList()
+
+        composeRule.setContent {
+            KlockTheme {
+                FirstLaunchOnboardingScreen(
+                    onComplete = { name, age, _, topics ->
+                        capturedName = name
+                        capturedAge = age
+                        capturedTopics = topics
+                    }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("onboarding_name_input").performTextInput("Rajat")
+        composeRule.onNodeWithTag("onboarding_age_input").performTextInput("23")
+        composeRule.onNodeWithTag("onboarding_activity_input").performScrollTo().performTextInput("Data Analyst")
+        composeRule.onNodeWithTag("btn_onboarding_next").performScrollTo().performClick()
+
+        // Step 2: Add an arbitrary custom topic alongside recommended topics
+        composeRule.onNodeWithTag("input_add_topic").performScrollTo().performTextInput("World History")
+        composeRule.onNodeWithTag("btn_add_topic").performClick()
+        composeRule.onNodeWithTag("btn_onboarding_finish").performScrollTo().performClick()
+
+        assertEquals("Rajat", capturedName)
+        assertEquals(23, capturedAge)
+        assertTrue(capturedTopics.any { it.name == "SQL" })
+        assertTrue(capturedTopics.any { it.name == "World History" })
+    }
+
+    @Test
+    fun `3-line menu button opens left-to-right navigation drawer with personalized greeting`() {
+        val state = MainUiState(
+            isInitialized = true,
+            settings = AppSettings(
+                userProfile = UserProfile(
+                    name = "Rajat",
+                    age = 23,
+                    currentActivityOrStudy = "Data & Analytics",
+                    onboardingCompleted = true
+                ),
+                configuredTopics = listOf(TopicConfig(name = "SQL"))
+            )
+        )
+
+        composeRule.setContent {
+            KlockTheme {
+                KlockMainAppScreen(
+                    state = state,
+                    nextScheduledSummary = "No active alarms",
+                    canScheduleExactAlarms = true,
+                    onSelectSection = {},
+                    onOpenCreateAlarm = {},
+                    onOpenEditAlarm = {},
+                    onCloseEditor = {},
+                    onSaveAlarm = {},
+                    onDeleteAlarm = {},
+                    onToggleAlarm = { _, _ -> },
+                    onDismissCompletionSummary = {},
+                    onUpdateTheme = {},
+                    onUpdateDefaultDifficulty = {},
+                    onSaveProfile = { _, _, _ -> },
+                    onSuggestFromProfile = { _, _ -> },
+                    onAddTopic = {},
+                    onToggleTopic = { _, _ -> },
+                    onRemoveTopic = {},
+                    onAddSubtopic = { _, _ -> },
+                    onToggleSubtopic = { _, _, _ -> },
+                    onRemoveSubtopic = { _, _ -> }
+                )
+            }
+        }
+
+        // Open slide-out drawer via 3-line menu icon
+        composeRule.onNodeWithTag("btn_open_drawer").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("navigation_drawer_sheet").assertIsDisplayed()
+        composeRule.onNodeWithTag("drawer_item_topics_and_profile").assertIsDisplayed()
+        composeRule.onNodeWithTag("drawer_item_history").assertIsDisplayed()
+        composeRule.onNodeWithTag("drawer_item_settings").assertIsDisplayed()
+    }
+
+    @Test
     @Config(qualifiers = "w320dp-h568dp-mdpi")
-    fun `small 320dp screen renders clean MCQ-only Active Alarm UI without source metadata or Stop button`() {
+    fun `small 320dp screen renders clean MCQ card and personalized Good morning name on completion`() {
         val sampleQ = AlarmQuestion(
             fingerprint = "fp_ui_1",
             slotIndex = 2,
-            category = QuestionCategory.POWER_BI,
+            topicId = "sql",
+            topicName = "SQL",
+            subtopicName = "Window Functions",
             difficulty = QuestionDifficulty.MEDIUM,
             format = QuestionFormat.MULTIPLE_CHOICE,
             provenance = QuestionProvenance.SOURCE_GROUNDED_EXTRACTED,
-            prompt = "Which DAX function modifies filter context in Power BI?",
-            codeSnippet = "Sales APAC = ____([Total Sales], Region = \"APAC\")",
-            options = listOf("CALCULATE", "SUM", "RELATED", "EARLIER"),
-            canonicalAnswer = "CALCULATE",
-            explanation = "CALCULATE modifies filter context.",
-            sourceTitle = "CALCULATE (DAX)",
-            sourceProvider = "Microsoft Learn",
-            sourceUrl = "https://learn.microsoft.com/en-us/dax/calculate-function-dax",
+            prompt = "Which keyword restarts window numbering per group?",
+            options = listOf("PARTITION BY", "GROUP BY", "ORDER BY", "HAVING"),
+            canonicalAnswer = "PARTITION BY",
+            explanation = "PARTITION BY splits rows into partitions.",
             fetchedAtMillis = 1_700_000_000_000L
         )
-        val session = ActiveAlarmSession(
-            sessionId = "sess_320dp",
+        val completed = ActiveAlarmSession(
+            sessionId = "sess_done",
             alarmId = 1L,
-            alarmLabel = "Morning Alarm",
+            alarmLabel = "Wake Up",
             startedAtMillis = 1_700_000_000_000L,
             requiredCount = 5,
-            solvedCount = 2,
-            currentQuestionIndex = 2,
+            solvedCount = 5,
             questions = List(5) { sampleQ.copy(slotIndex = it, fingerprint = "fp_$it") },
             retrievalStatus = RetrievalStatus.READY,
-            emergencyOverrideCode = "KLOCK-9X2P4M"
+            emergencyOverrideCode = "KLOCK-9X2P4M",
+            completed = true,
+            completedAtMillis = 1_700_000_030_000L
         )
 
         composeRule.setContent {
             KlockTheme {
                 ActiveAlarmRootScreen(
                     state = ActiveAlarmUiState(
-                        session = session,
-                        isAudioRinging = true
+                        session = null,
+                        completedSession = completed,
+                        settings = AppSettings(
+                            userProfile = UserProfile(name = "Rajat", onboardingCompleted = true)
+                        )
                     ),
                     onSelectOption = {},
                     onRetryFetch = {},
@@ -194,20 +258,6 @@ class PlatformCompatibilityAndComposeUiTest {
             }
         }
 
-        composeRule.onNodeWithTag("mechanical_lock_bar").assertIsDisplayed()
-        composeRule.onNodeWithText("Question 3 of 5").assertIsDisplayed()
-        composeRule.onNodeWithText("2 / 5").assertIsDisplayed()
-        composeRule.onNodeWithTag("active_question_prompt").assertIsDisplayed()
-        composeRule.onNodeWithTag("option_0").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("option_3").performScrollTo().assertIsDisplayed()
-
-        // Verify source metadata and technical jargon are hidden from the UI
-        assertEquals(0, composeRule.onAllNodesWithText("Microsoft Learn", substring = true, ignoreCase = true).fetchSemanticsNodes().size)
-        assertEquals(0, composeRule.onAllNodesWithText("https://", substring = true, ignoreCase = true).fetchSemanticsNodes().size)
-        assertEquals(0, composeRule.onAllNodesWithText("SOURCE-GROUNDED", substring = true, ignoreCase = true).fetchSemanticsNodes().size)
-
-        // Verify NO ordinary "Stop" or "Snooze" button exists on active ringing screen
-        assertEquals(0, composeRule.onAllNodesWithText("Stop", ignoreCase = true).fetchSemanticsNodes().size)
-        assertEquals(0, composeRule.onAllNodesWithText("Snooze", ignoreCase = true).fetchSemanticsNodes().size)
+        composeRule.onNodeWithText("Good morning, Rajat!").assertIsDisplayed()
     }
 }

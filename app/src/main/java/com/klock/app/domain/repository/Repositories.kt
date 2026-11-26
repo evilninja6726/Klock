@@ -4,10 +4,10 @@ import com.klock.app.domain.model.ActiveAlarmSession
 import com.klock.app.domain.model.Alarm
 import com.klock.app.domain.model.AlarmQuestion
 import com.klock.app.domain.model.AppSettings
-import com.klock.app.domain.model.CategoryPerformanceStat
 import com.klock.app.domain.model.DifficultyPreset
-import com.klock.app.domain.model.QuestionCategory
 import com.klock.app.domain.model.QuestionHistoryRecord
+import com.klock.app.domain.model.TopicConfig
+import com.klock.app.domain.model.TopicPerformanceStat
 import kotlinx.coroutines.flow.Flow
 
 interface AlarmRepository {
@@ -35,7 +35,7 @@ interface QuestionHistoryRepository {
     suspend fun getRecentFingerprints(limit: Int = 300): Set<String>
     suspend fun getRecentSourceUrls(limit: Int = 60): Set<String>
     suspend fun recordQuestionOutcome(record: QuestionHistoryRecord)
-    suspend fun getCategoryPerformanceStats(): Map<QuestionCategory, CategoryPerformanceStat>
+    suspend fun getTopicPerformanceStats(): Map<String, TopicPerformanceStat>
     suspend fun pruneOldFingerprints(keepLatest: Int = 500)
 }
 
@@ -47,7 +47,7 @@ interface SettingsRepository {
 
 interface QuestionEngine {
     suspend fun fetchFreshQuestions(
-        categories: Set<QuestionCategory>,
+        topics: List<TopicConfig>,
         difficultyPreset: DifficultyPreset,
         count: Int = Alarm.DEFAULT_REQUIRED_QUESTIONS,
         excludedFingerprints: Set<String> = emptySet()

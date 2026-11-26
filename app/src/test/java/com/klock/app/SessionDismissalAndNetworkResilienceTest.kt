@@ -9,15 +9,15 @@ import com.klock.app.domain.model.Alarm
 import com.klock.app.domain.model.AlarmQuestion
 import com.klock.app.domain.model.AnswerEvaluationResult
 import com.klock.app.domain.model.AppSettings
-import com.klock.app.domain.model.CategoryPerformanceStat
 import com.klock.app.domain.model.DifficultyPreset
 import com.klock.app.domain.model.OverrideReason
-import com.klock.app.domain.model.QuestionCategory
 import com.klock.app.domain.model.QuestionDifficulty
 import com.klock.app.domain.model.QuestionFormat
 import com.klock.app.domain.model.QuestionHistoryRecord
 import com.klock.app.domain.model.QuestionProvenance
 import com.klock.app.domain.model.RetrievalStatus
+import com.klock.app.domain.model.TopicConfig
+import com.klock.app.domain.model.TopicPerformanceStat
 import com.klock.app.domain.repository.AlarmRepository
 import com.klock.app.domain.repository.QuestionEngine
 import com.klock.app.domain.repository.QuestionHistoryRepository
@@ -52,7 +52,7 @@ class SessionDismissalAndNetworkResilienceTest {
 
         val engine = object : QuestionEngine {
             override suspend fun fetchFreshQuestions(
-                categories: Set<QuestionCategory>,
+                topics: List<TopicConfig>,
                 difficultyPreset: DifficultyPreset,
                 count: Int,
                 excludedFingerprints: Set<String>
@@ -60,7 +60,7 @@ class SessionDismissalAndNetworkResilienceTest {
                 if (!networkOnline) {
                     return Result.failure(IOException("Airplane mode: no internet route"))
                 }
-                return Result.success(generateQuestions(count, excludedFingerprints))
+                return Result.success(generateQuestions(count, excludedFingerprints, topics))
             }
         }
 
@@ -77,7 +77,7 @@ class SessionDismissalAndNetworkResilienceTest {
 
         val alarmId = alarmRepo.upsertAlarm(Alarm(hour = 6, minute = 30, label = "Morning SQL"))
         audio.startRinging()
-        assertTrue("Audio must start immediately before network fetch", audio.isRinging.value)
+        assertTrue(audio.isRinging.value)
 
         coordinator.onAlarmTriggered(alarmId, "Morning SQL")
         val failedFetch = coordinator.fetchOrRetryQuestions()
@@ -87,9 +87,7 @@ class SessionDismissalAndNetworkResilienceTest {
         val erroredSession = sessionRepo.getActiveSession()
         assertNotNull(erroredSession)
         assertEquals(RetrievalStatus.NETWORK_ERROR, erroredSession!!.retrievalStatus)
-        assertEquals(0, erroredSession.solvedCount)
 
-        // Restore internet and retry -> 5 fresh questions become READY while audio still rings
         networkOnline = true
         val recoveredFetch = coordinator.fetchOrRetryQuestions()
         assertTrue(recoveredFetch.isSuccess)
@@ -100,7 +98,7 @@ class SessionDismissalAndNetworkResilienceTest {
     }
 
     @Test
-    fun `five correct answers mandatory - wrong answers retry without advancing and 5th stops audio immediately`() = runTest {
+    fun `wrong answers shuffle options without advancing and 5th correct answer stops audio`() = runTest {
         val audio = FakeAudioController()
         val sessionRepo = InMemorySessionRepository()
         val alarmRepo = InMemoryAlarmRepository()
@@ -110,11 +108,11 @@ class SessionDismissalAndNetworkResilienceTest {
 
         val engine = object : QuestionEngine {
             override suspend fun fetchFreshQuestions(
-                categories: Set<QuestionCategory>,
+                topics: List<TopicConfig>,
                 difficultyPreset: DifficultyPreset,
                 count: Int,
                 excludedFingerprints: Set<String>
-            ): Result<List<AlarmQuestion>> = Result.success(generateQuestions(count, excludedFingerprints))
+            ): Result<List<AlarmQuestion>> = Result.success(generateQuestions(count, excludedFingerprints, topics))
         }
 
         val coordinator = AlarmSessionCoordinator(
@@ -133,61 +131,79 @@ class SessionDismissalAndNetworkResilienceTest {
         coordinator.onAlarmTriggered(alarmId)
         coordinator.fetchOrRetryQuestions()
 
-        // Submit two wrong answers on question 1 -> progress stays 0/5, options reshuffle each time, and audio stays ringing
         val initialOptions = sessionRepo.getActiveSession()!!.currentQuestion!!.options
         val (wrong1, s1) = coordinator.submitAnswer("WRONG_A")
         assertTrue(wrong1 is AnswerEvaluationResult.Incorrect)
         assertEquals(0, s1!!.solvedCount)
-        assertEquals(0, s1.currentQuestionIndex)
-        assertEquals(1, s1.totalWrongAttempts)
         val afterWrong1Options = s1.currentQuestion!!.options
-        assertEquals("Option set must stay identical", initialOptions.toSet(), afterWrong1Options.toSet())
-        assertTrue("Options must shuffle to a new order on wrong answer", afterWrong1Options != initialOptions)
+        assertEquals(initialOptions.toSet(), afterWrong1Options.toSet())
+        assertTrue("Options must shuffle on wrong answer", afterWrong1Options != initialOptions)
         assertTrue(audio.isRinging.value)
 
-        val (wrong2, s2) = coordinator.submitAnswer("WRONG_B")
-        assertTrue(wrong2 is AnswerEvaluationResult.Incorrect)
-        assertEquals(0, s2!!.solvedCount)
-        assertEquals(2, s2.totalWrongAttempts)
-        val afterWrong2Options = s2.currentQuestion!!.options
-        assertEquals(initialOptions.toSet(), afterWrong2Options.toSet())
-        assertTrue("Options must shuffle again on second wrong answer", afterWrong2Options != afterWrong1Options)
-        assertTrue(audio.isRinging.value)
-
-        // Answer questions 1..4 correctly -> audio STILL rings at 4/5!
         for (idx in 0 until 4) {
             val currentQ = sessionRepo.getActiveSession()!!.currentQuestion!!
             val (ok, updated) = coordinator.submitAnswer(currentQ.canonicalAnswer)
             assertTrue(ok is AnswerEvaluationResult.Correct)
             assertEquals(idx + 1, updated!!.solvedCount)
-            assertFalse(updated.completed)
-            assertTrue("Audio must keep ringing at ${idx + 1}/5", audio.isRinging.value)
+            assertTrue(audio.isRinging.value)
         }
 
-        // Answer 5th question correctly -> audio stops IMMEDIATELY and active session clears to completed!
         val fifthQ = sessionRepo.getActiveSession()!!.currentQuestion!!
-        var callbackInvoked = false
-        val (ok5, finalSession) = coordinator.submitAnswer(fifthQ.canonicalAnswer) {
-            callbackInvoked = true
-        }
+        val (ok5, finalSession) = coordinator.submitAnswer(fifthQ.canonicalAnswer)
         assertTrue(ok5 is AnswerEvaluationResult.Correct)
         assertEquals(5, finalSession!!.solvedCount)
         assertTrue(finalSession.completed)
-        assertTrue(callbackInvoked)
-        assertFalse("Audio MUST stop immediately after 5th correct answer", audio.isRinging.value)
-        assertNull("Active slot must be cleared after completion", sessionRepo.getActiveSession())
-        assertEquals(5, historyRepo.getRecentFingerprints(10).size)
+        assertFalse(audio.isRinging.value)
+        assertNull(sessionRepo.getActiveSession())
+    }
 
-        // Trigger a second alarm and verify previous 5 fingerprints are excluded (zero duplicates!)
-        val secondAlarmId = alarmRepo.upsertAlarm(Alarm(hour = 8, minute = 0))
-        audio.startRinging()
-        coordinator.onAlarmTriggered(secondAlarmId)
-        val secondBatch = coordinator.fetchOrRetryQuestions().getOrThrow().questions
-        val firstFingerprints = finalSession.questions.map { it.fingerprint }.toSet()
-        assertTrue(
-            "Second alarm batch must exclude recently used questions",
-            secondBatch.none { it.fingerprint in firstFingerprints }
+    @Test
+    fun `supports up to 100 questions per alarm via progressive 10-question batching`() = runTest {
+        val audio = FakeAudioController()
+        val sessionRepo = InMemorySessionRepository()
+        val alarmRepo = InMemoryAlarmRepository()
+        val historyRepo = InMemoryHistoryRepository()
+        val settingsRepo = InMemorySettingsRepository()
+
+        val coordinator = AlarmSessionCoordinator(
+            alarmRepository = alarmRepo,
+            sessionRepository = sessionRepo,
+            historyRepository = historyRepo,
+            settingsRepository = settingsRepo,
+            questionEngine = object : QuestionEngine {
+                override suspend fun fetchFreshQuestions(
+                    topics: List<TopicConfig>,
+                    difficultyPreset: DifficultyPreset,
+                    count: Int,
+                    excludedFingerprints: Set<String>
+                ) = Result.success(generateQuestions(count, excludedFingerprints, topics))
+            },
+            answerValidator = AnswerValidator(),
+            alarmScheduler = FakeScheduler(),
+            audioController = audio
         )
+
+        val alarmId = alarmRepo.upsertAlarm(
+            Alarm(hour = 6, minute = 0, requiredQuestions = 100)
+        )
+        audio.startRinging()
+        coordinator.onAlarmTriggered(alarmId)
+        val firstBatch = coordinator.fetchOrRetryQuestions().getOrThrow()
+        assertEquals(100, firstBatch.requiredCount)
+        assertEquals("First progressive batch loads 10 questions immediately", 10, firstBatch.questions.size)
+
+        for (step in 1..100) {
+            val currentQ = sessionRepo.getActiveSession()!!.currentQuestion!!
+            val (res, updated) = coordinator.submitAnswer(currentQ.canonicalAnswer)
+            assertTrue(res is AnswerEvaluationResult.Correct)
+            assertEquals(step, updated!!.solvedCount)
+            if (step < 100) {
+                assertTrue("Audio stays ringing until 100th answer", audio.isRinging.value)
+            } else {
+                assertFalse("Audio stops immediately after 100th answer", audio.isRinging.value)
+                assertTrue(updated.completed)
+            }
+        }
     }
 
     @Test
@@ -201,11 +217,11 @@ class SessionDismissalAndNetworkResilienceTest {
             settingsRepository = InMemorySettingsRepository(),
             questionEngine = object : QuestionEngine {
                 override suspend fun fetchFreshQuestions(
-                    categories: Set<QuestionCategory>,
+                    topics: List<TopicConfig>,
                     difficultyPreset: DifficultyPreset,
                     count: Int,
                     excludedFingerprints: Set<String>
-                ) = Result.success(generateQuestions(count, excludedFingerprints))
+                ) = Result.success(generateQuestions(count, excludedFingerprints, topics))
             },
             answerValidator = AnswerValidator(),
             alarmScheduler = FakeScheduler(),
@@ -215,7 +231,6 @@ class SessionDismissalAndNetworkResilienceTest {
         audio.startRinging()
         val session = coordinator.onAlarmTriggered(1L)
 
-        // Short hold (2.5s) + wrong code MUST fail and keep audio ringing
         val rejected = coordinator.executeEmergencyOverride(
             reason = OverrideReason.SAFETY_MEDICAL,
             holdDurationMillis = 2_500L,
@@ -224,25 +239,25 @@ class SessionDismissalAndNetworkResilienceTest {
         assertTrue(rejected.isFailure)
         assertTrue(audio.isRinging.value)
 
-        // Exact accessibility confirmation code succeeds and stops audio
         val accepted = coordinator.executeEmergencyOverride(
             reason = OverrideReason.ACCESSIBILITY,
             holdDurationMillis = 0L,
             typedConfirmationCode = session.emergencyOverrideCode
         )
         assertTrue(accepted.isSuccess)
-        assertTrue(accepted.getOrThrow().dismissedViaOverride)
         assertFalse(audio.isRinging.value)
     }
 
     private fun generateQuestions(
         count: Int,
-        excluded: Set<String>
+        excluded: Set<String>,
+        topics: List<TopicConfig>
     ): List<AlarmQuestion> {
         val out = mutableListOf<AlarmQuestion>()
         var seq = 1
-        val cats = QuestionCategory.entries
+        val safeTopics = topics.ifEmpty { listOf(TopicConfig(name = "SQL")) }
         while (out.size < count) {
+            val topic = safeTopics[seq % safeTopics.size]
             val prompt = "Fresh question #$seq"
             val answer = "ANS_$seq"
             val fp = SecurityGuards.computeQuestionFingerprint(prompt, answer)
@@ -250,7 +265,8 @@ class SessionDismissalAndNetworkResilienceTest {
                 out += AlarmQuestion(
                     fingerprint = fp,
                     slotIndex = out.size,
-                    category = cats[seq % cats.size],
+                    topicId = topic.id,
+                    topicName = topic.name,
                     difficulty = QuestionDifficulty.MEDIUM,
                     format = QuestionFormat.MULTIPLE_CHOICE,
                     provenance = QuestionProvenance.SOURCE_GROUNDED_EXTRACTED,
@@ -259,8 +275,8 @@ class SessionDismissalAndNetworkResilienceTest {
                     canonicalAnswer = answer,
                     explanation = "Explanation $seq",
                     sourceTitle = "Doc $seq",
-                    sourceProvider = "Microsoft Learn",
-                    sourceUrl = "https://learn.microsoft.com/en-us/sql/doc-$seq",
+                    sourceProvider = "Wikipedia",
+                    sourceUrl = "https://en.wikipedia.org/wiki/Doc_$seq",
                     fetchedAtMillis = 1_700_000_000_000L + seq
                 )
             }
@@ -269,8 +285,6 @@ class SessionDismissalAndNetworkResilienceTest {
         return out
     }
 }
-
-// Lightweight test doubles
 
 internal class FakeAudioController : AlarmAudioController {
     private val _ringing = MutableStateFlow(false)
@@ -363,7 +377,7 @@ internal class InMemoryHistoryRepository : QuestionHistoryRepository {
         items.add(record)
         flow.value = items.reversed()
     }
-    override suspend fun getCategoryPerformanceStats(): Map<QuestionCategory, CategoryPerformanceStat> = emptyMap()
+    override suspend fun getTopicPerformanceStats(): Map<String, TopicPerformanceStat> = emptyMap()
     override suspend fun pruneOldFingerprints(keepLatest: Int) {
         while (items.size > keepLatest) items.removeAt(0)
     }

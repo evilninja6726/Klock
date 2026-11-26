@@ -201,6 +201,7 @@ fun ActiveAlarmRootScreen(
                 state.completedSession != null -> {
                     ActiveCompletionScreen(
                         session = state.completedSession,
+                        userName = state.settings.userProfile.name,
                         onDone = onCloseFinished
                     )
                 }
@@ -384,7 +385,12 @@ private fun McqQuestionCardBody(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            TechnicalTag(text = question.category.displayName, highlighted = true)
+            val pillLabel = if (!question.subtopicName.isNullOrBlank()) {
+                "${question.topicName} · ${question.subtopicName}"
+            } else {
+                question.topicName
+            }
+            TechnicalTag(text = pillLabel, highlighted = true)
 
             Text(
                 text = question.prompt,
@@ -652,9 +658,11 @@ fun EmergencyOverrideView(
 @Composable
 fun ActiveCompletionScreen(
     session: ActiveAlarmSession,
+    userName: String = "",
     onDone: () -> Unit
 ) {
     val palette = LocalKlockPalette.current
+    val greeting = if (userName.isBlank()) "Good morning!" else "Good morning, $userName!"
 
     Column(
         modifier = Modifier
@@ -672,7 +680,7 @@ fun ActiveCompletionScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = if (session.dismissedViaOverride) "Alarm stopped" else "Good morning!",
+                    text = if (session.dismissedViaOverride) "Alarm stopped" else greeting,
                     style = MaterialTheme.typography.headlineMedium,
                     color = palette.inkPrimary
                 )

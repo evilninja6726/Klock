@@ -63,7 +63,7 @@ import com.klock.app.core.device.OemCompatibilityAdvisor
 import com.klock.app.domain.model.ActiveAlarmSession
 import com.klock.app.domain.model.Alarm
 import com.klock.app.domain.model.DifficultyPreset
-import com.klock.app.domain.model.QuestionCategory
+import com.klock.app.domain.model.TopicConfig
 import com.klock.app.ui.components.HairlineCard
 import com.klock.app.ui.components.MechanicalToggle
 import com.klock.app.ui.components.TactilePrimaryButton
@@ -85,6 +85,8 @@ private val DAY_LABELS = listOf(
 @Composable
 fun AlarmListSection(
     alarms: List<Alarm>,
+    configuredTopics: List<TopicConfig>,
+    userName: String,
     canScheduleExact: Boolean,
     activeSession: ActiveAlarmSession?,
     completedSessionToReview: ActiveAlarmSession?,
@@ -93,6 +95,7 @@ fun AlarmListSection(
     onToggleAlarm: (Alarm, Boolean) -> Unit,
     onEditAlarm: (Alarm) -> Unit,
     onCreateAlarm: () -> Unit,
+    onOpenTopicsManager: () -> Unit,
     onTriggerNowForTest: (Alarm) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
@@ -172,6 +175,7 @@ fun AlarmListSection(
                 item(key = "completion_summary_${completedSessionToReview.sessionId}") {
                     CompletionSummaryCard(
                         session = completedSessionToReview,
+                        userName = userName,
                         onDismiss = { onDismissCompletedReview(completedSessionToReview.sessionId) }
                     )
                 }
@@ -193,6 +197,31 @@ fun AlarmListSection(
                 }
             }
 
+            if (configuredTopics.none { it.enabled }) {
+                item(key = "no_topics_warning") {
+                    HairlineCard(onClick = onOpenTopicsManager) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Choose your question topics",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = palette.inkPrimary
+                            )
+                            Text(
+                                text = "Configure ->",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = palette.signal
+                            )
+                        }
+                    }
+                }
+            }
+
             if (alarms.isEmpty()) {
                 item(key = "empty_state") {
                     HairlineCard {
@@ -203,12 +232,12 @@ fun AlarmListSection(
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = "No alarms yet",
+                                text = if (userName.isNotBlank()) "Hi, $userName" else "No alarms yet",
                                 style = MaterialTheme.typography.headlineMedium,
                                 color = palette.inkPrimary
                             )
                             Text(
-                                text = "Set an alarm and wake up by answering 5 fresh multiple-choice questions.",
+                                text = "Set an alarm and wake up by answering fresh multiple-choice questions on your chosen topics.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = palette.inkSecondary
                             )
@@ -224,6 +253,7 @@ fun AlarmListSection(
                 items(items = alarms, key = { it.id }) { alarm ->
                     AlarmRowCard(
                         alarm = alarm,
+                        configuredTopics = configuredTopics,
                         onToggle = { enabled -> onToggleAlarm(alarm, enabled) },
                         onClick = { onEditAlarm(alarm) },
                         onTestRing = { onTriggerNowForTest(alarm) }
@@ -261,6 +291,7 @@ fun AlarmListSection(
 @Composable
 private fun AlarmRowCard(
     alarm: Alarm,
+    configuredTopics: List<TopicConfig>,
     onToggle: (Boolean) -> Unit,
     onClick: () -> Unit,
     onTestRing: () -> Unit
@@ -271,12 +302,17 @@ private fun AlarmRowCard(
         minute = alarm.minute,
         use24Hour = false
     )
-    val categorySummary = if (alarm.categories.size >= QuestionCategory.ALL.size) {
-        "All topics"
+
+    val activeTopicNames = if (alarm.selectedTopicIds.isEmpty()) {
+        val enabled = configuredTopics.filter { it.enabled }.map { it.name }
+        if (enabled.isEmpty()) "Your topics"
+        else if (enabled.size <= 2) enabled.joinToString(", ")
+        else "${enabled.take(2).joinToString(", ")} +${enabled.size - 2}"
     } else {
-        val names = alarm.categories.take(2).joinToString(", ") { it.displayName }
-        val extra = alarm.categories.size - 2
-        if (extra > 0) "$names +$extra" else names
+        val matched = configuredTopics.filter { it.id in alarm.selectedTopicIds }.map { it.name }
+        if (matched.isEmpty()) "Your topics"
+        else if (matched.size <= 2) matched.joinToString(", ")
+        else "${matched.take(2).joinToString(", ")} +${matched.size - 2}"
     }
 
     HairlineCard(onClick = onClick) {
@@ -389,7 +425,8 @@ private fun AlarmRowCard(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    TechnicalTag(text = categorySummary)
+                    TechnicalTag(text = "${alarm.requiredQuestions} Qs")
+                    TechnicalTag(text = activeTopicNames)
                     TechnicalTag(text = alarm.difficultyPreset.displayName)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -527,9 +564,11 @@ private fun ReadinessActionRow(
 @Composable
 fun CompletionSummaryCard(
     session: ActiveAlarmSession,
+    userName: String,
     onDismiss: () -> Unit
 ) {
     val palette = LocalKlockPalette.current
+    val greeting = if (userName.isBlank()) "Good morning!" else "Good morning, $userName!"
 
     HairlineCard {
         Row(
@@ -541,7 +580,7 @@ fun CompletionSummaryCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = if (session.dismissedViaOverride) "Alarm stopped" else "Good morning!",
+                    text = if (session.dismissedViaOverride) "Alarm stopped" else greeting,
                     style = MaterialTheme.typography.titleMedium,
                     color = if (session.dismissedViaOverride) palette.signal else palette.verified
                 )
@@ -572,6 +611,8 @@ fun CompletionSummaryCard(
 @Composable
 fun AlarmEditorSheet(
     initialAlarm: Alarm,
+    configuredTopics: List<TopicConfig>,
+    onOpenTopicsManager: () -> Unit,
     onSave: (Alarm) -> Unit,
     onDelete: ((Long) -> Unit)?,
     onCancel: () -> Unit,
@@ -586,13 +627,18 @@ fun AlarmEditorSheet(
     var isPm by remember(initialAlarm) { mutableStateOf(initialIsPm) }
     var label by remember(initialAlarm) { mutableStateOf(initialAlarm.label) }
     var repeatDays by remember(initialAlarm) { mutableStateOf(initialAlarm.repeatDays) }
-    var selectedCategories by remember(initialAlarm) { mutableStateOf(initialAlarm.categories) }
+    var selectedTopicIds by remember(initialAlarm) { mutableStateOf(initialAlarm.selectedTopicIds) }
     var difficultyPreset by remember(initialAlarm) { mutableStateOf(initialAlarm.difficultyPreset) }
+    var questionCountText by remember(initialAlarm) {
+        mutableStateOf(initialAlarm.requiredQuestions.toString())
+    }
     var vibrate by remember(initialAlarm) { mutableStateOf(initialAlarm.vibrate) }
 
     val parsedHour12 = (hourText.toIntOrNull() ?: initialHour12).coerceIn(1, 12)
     val parsedMinute = (minuteText.toIntOrNull() ?: initialAlarm.minute).coerceIn(0, 59)
     val computedHour24 = AlarmTimeCalculator.to24Hour(parsedHour12, isPm)
+    val parsedQuestionCount = (questionCountText.toIntOrNull() ?: Alarm.DEFAULT_REQUIRED_QUESTIONS)
+        .coerceIn(Alarm.MIN_REQUIRED_QUESTIONS, Alarm.MAX_REQUIRED_QUESTIONS)
 
     Column(
         modifier = modifier
@@ -623,7 +669,7 @@ fun AlarmEditorSheet(
             )
         }
 
-        // 12-Hour Time Picker with AM / PM selector
+        // 12-Hour Time Picker
         HairlineCard {
             Column(
                 modifier = Modifier
@@ -672,21 +718,12 @@ fun AlarmEditorSheet(
                         modifier = Modifier.weight(1f)
                     )
 
-                    // AM / PM stacked selector
                     Column(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.padding(top = 18.dp)
                     ) {
-                        AmPmOption(
-                            text = "AM",
-                            selected = !isPm,
-                            onClick = { isPm = false }
-                        )
-                        AmPmOption(
-                            text = "PM",
-                            selected = isPm,
-                            onClick = { isPm = true }
-                        )
+                        AmPmOption(text = "AM", selected = !isPm, onClick = { isPm = false })
+                        AmPmOption(text = "PM", selected = isPm, onClick = { isPm = true })
                     }
                 }
             }
@@ -779,7 +816,7 @@ fun AlarmEditorSheet(
             }
         }
 
-        // Question Topics
+        // Number of Questions (Default 5, Max 100)
         HairlineCard {
             Column(
                 modifier = Modifier
@@ -787,7 +824,101 @@ fun AlarmEditorSheet(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                val allSelected = selectedCategories.size == QuestionCategory.ALL.size
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Number of Questions",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = palette.inkPrimary
+                        )
+                        Text(
+                            text = "Default 5 · Up to 100 questions",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = palette.inkSecondary
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        TactileSecondaryButton(
+                            text = "−",
+                            enabled = parsedQuestionCount > Alarm.MIN_REQUIRED_QUESTIONS,
+                            onClick = {
+                                questionCountText = (parsedQuestionCount - 1)
+                                    .coerceAtLeast(Alarm.MIN_REQUIRED_QUESTIONS)
+                                    .toString()
+                            }
+                        )
+                        OutlinedTextField(
+                            value = questionCountText,
+                            onValueChange = { raw ->
+                                if (raw.length <= 3 && raw.all { it.isDigit() }) {
+                                    questionCountText = raw
+                                }
+                            },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            textStyle = MaterialTheme.typography.titleMedium.copy(color = palette.inkPrimary),
+                            modifier = Modifier
+                                .width(72.dp)
+                                .testTag("input_question_count"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = palette.inset,
+                                unfocusedContainerColor = palette.inset
+                            )
+                        )
+                        TactileSecondaryButton(
+                            text = "+",
+                            enabled = parsedQuestionCount < Alarm.MAX_REQUIRED_QUESTIONS,
+                            onClick = {
+                                questionCountText = (parsedQuestionCount + 1)
+                                    .coerceAtMost(Alarm.MAX_REQUIRED_QUESTIONS)
+                                    .toString()
+                            }
+                        )
+                    }
+                }
+
+                // Quick-pick pills up to 100
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(5, 10, 25, 50, 100).forEach { presetCount ->
+                        val active = parsedQuestionCount == presetCount
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (active) palette.inkPrimary else palette.inset,
+                            border = BorderStroke(1.dp, if (active) palette.inkPrimary else palette.border),
+                            modifier = Modifier.clickable {
+                                questionCountText = presetCount.toString()
+                            }
+                        ) {
+                            Text(
+                                text = "$presetCount",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (active) palette.canvas else palette.inkPrimary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Topics for This Alarm (Flexible user-configured topics)
+        HairlineCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -798,48 +929,72 @@ fun AlarmEditorSheet(
                         style = MaterialTheme.typography.titleMedium,
                         color = palette.inkPrimary
                     )
-                    if (!allSelected) {
-                        Text(
-                            text = "Select all",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = palette.signal,
-                            modifier = Modifier.clickable {
-                                selectedCategories = QuestionCategory.ALL
-                            }
-                        )
-                    }
+                    Text(
+                        text = "Edit topics & subtopics",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = palette.signal,
+                        modifier = Modifier.clickable(onClick = onOpenTopicsManager)
+                    )
                 }
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    QuestionCategory.entries.forEach { cat ->
-                        val active = cat in selectedCategories
+
+                if (configuredTopics.isEmpty()) {
+                    Text(
+                        text = "No topics configured yet. Tap 'Edit topics & subtopics' to add any topic.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = palette.inkSecondary
+                    )
+                } else {
+                    Text(
+                        text = if (selectedTopicIds.isEmpty()) {
+                            "Using all your active topics (tap below to pick specific ones for this alarm)"
+                        } else {
+                            "${selectedTopicIds.size} specific topic(s) selected for this alarm"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = palette.inkSecondary
+                    )
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val useAllActive = selectedTopicIds.isEmpty()
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = if (active) palette.inkPrimary else palette.inset,
-                            border = BorderStroke(
-                                1.dp,
-                                if (active) palette.inkPrimary else palette.border
-                            ),
-                            modifier = Modifier
-                                .defaultMinSize(minHeight = 40.dp)
-                                .clickable {
-                                    if (active && selectedCategories.size > 1) {
-                                        selectedCategories = selectedCategories - cat
-                                    } else if (!active) {
-                                        selectedCategories = selectedCategories + cat
+                            color = if (useAllActive) palette.inkPrimary else palette.inset,
+                            border = BorderStroke(1.dp, if (useAllActive) palette.inkPrimary else palette.border),
+                            modifier = Modifier.clickable { selectedTopicIds = emptySet() }
+                        ) {
+                            Text(
+                                text = "All Active Topics",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (useAllActive) palette.canvas else palette.inkPrimary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
+
+                        configuredTopics.forEach { topic ->
+                            val isSelected = topic.id in selectedTopicIds
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isSelected) palette.inkPrimary else palette.inset,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) palette.inkPrimary else palette.border
+                                ),
+                                modifier = Modifier.clickable {
+                                    selectedTopicIds = if (isSelected) {
+                                        selectedTopicIds - topic.id
+                                    } else {
+                                        selectedTopicIds + topic.id
                                     }
                                 }
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                             ) {
                                 Text(
-                                    text = cat.displayName,
+                                    text = topic.name,
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = if (active) palette.canvas else palette.inkPrimary
+                                    color = if (isSelected) palette.canvas else palette.inkPrimary,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                                 )
                             }
                         }
@@ -932,9 +1087,9 @@ fun AlarmEditorSheet(
                             label = label.trim(),
                             enabled = true,
                             repeatDays = repeatDays,
-                            categories = selectedCategories,
+                            selectedTopicIds = selectedTopicIds,
                             difficultyPreset = difficultyPreset,
-                            requiredQuestions = Alarm.DEFAULT_REQUIRED_QUESTIONS,
+                            requiredQuestions = parsedQuestionCount,
                             vibrate = vibrate
                         )
                     )

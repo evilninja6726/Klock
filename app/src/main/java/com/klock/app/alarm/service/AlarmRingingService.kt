@@ -70,7 +70,7 @@ class AlarmRingingService : Service() {
         // 2. Promote to Foreground immediately with full-screen lock-screen intent and ZERO dismiss buttons.
         val notification = buildOngoingAlarmNotification(
             label = alarmLabel,
-            progressText = "0 of 5 answered · Tap to answer"
+            progressText = "Alarm ringing · Tap to answer"
         )
         startForegroundCompat(notification)
 

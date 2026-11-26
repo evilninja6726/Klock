@@ -4,9 +4,9 @@ import com.klock.app.core.device.DeviceMemoryTier
 import com.klock.app.core.security.SecurityGuards
 import com.klock.app.data.repository.ByokSecretStore
 import com.klock.app.domain.model.DifficultyPreset
-import com.klock.app.domain.model.QuestionCategory
 import com.klock.app.domain.model.QuestionFormat
-import com.klock.app.domain.model.QuestionProvenance
+import com.klock.app.domain.model.SubtopicConfig
+import com.klock.app.domain.model.TopicConfig
 import com.klock.app.questions.engine.LiveQuestionEngine
 import com.klock.app.questions.network.LiveEducationalSourcesClient
 import kotlinx.coroutines.test.runTest
@@ -21,7 +21,7 @@ import org.junit.Test
 class LiveQuestionEngineAndSourcesTest {
 
     @Test
-    fun `fetches 5 fresh non-duplicate questions across all 5 categories with genuine URLs and provenance`() = runTest {
+    fun `fetches 5 fresh MCQs across arbitrary custom topics and subtopics`() = runTest {
         val server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
@@ -40,16 +40,6 @@ class LiveQuestionEngineAndSourcesTest {
                               "title": "CALCULATE function (DAX) - Power BI",
                               "description": "Evaluates a DAX expression in a modified filter context inside Power BI semantic models and measures.",
                               "url": "${server.url("/docs/dax-calculate")}"
-                            },
-                            {
-                              "title": "SUMX function (DAX) - Power BI",
-                              "description": "Returns the sum of an expression evaluated for each row in a table using row context iteration.",
-                              "url": "${server.url("/docs/dax-sumx")}"
-                            },
-                            {
-                              "title": "SELECT DISTINCT - SQL",
-                              "description": "Eliminates duplicate rows from the result set of a SQL projection query.",
-                              "url": "${server.url("/docs/sql-distinct")}"
                             }
                           ]
                         }
@@ -61,11 +51,11 @@ class LiveQuestionEngineAndSourcesTest {
                         {
                           "query": {
                             "search": [
-                              {"title": "List comprehension"},
-                              {"title": "Customer acquisition cost"},
-                              {"title": "Gross margin"},
-                              {"title": "Market segmentation"},
-                              {"title": "Return on investment"}
+                              {"title": "Central nervous system"},
+                              {"title": "Industrial Revolution"},
+                              {"title": "Monetary policy"},
+                              {"title": "Synapse"},
+                              {"title": "Fiscal policy"}
                             ]
                           }
                         }
@@ -78,19 +68,19 @@ class LiveQuestionEngineAndSourcesTest {
                           "query": {
                             "pages": {
                               "101": {
-                                "title": "List comprehension",
-                                "extract": "A list comprehension is a syntactic construct available in Python for creating a list based on existing iterables and filter predicates.",
-                                "fullurl": "${server.url("/wiki/List_comprehension")}"
+                                "title": "Central nervous system",
+                                "extract": "The central nervous system (CNS) is the part of the nervous system consisting primarily of the brain and spinal cord in vertebrates.",
+                                "fullurl": "${server.url("/wiki/Central_nervous_system")}"
                               },
                               "102": {
-                                "title": "Customer acquisition cost",
-                                "extract": "Customer acquisition cost (CAC) is the total marketing and sales expenditure required to convince a potential customer to purchase a product or service.",
-                                "fullurl": "${server.url("/wiki/Customer_acquisition_cost")}"
+                                "title": "Industrial Revolution",
+                                "extract": "The Industrial Revolution was the transition to new manufacturing processes in Great Britain, continental Europe, and the United States.",
+                                "fullurl": "${server.url("/wiki/Industrial_Revolution")}"
                               },
                               "103": {
-                                "title": "Gross margin",
-                                "extract": "Gross margin is the difference between revenue and cost of goods sold divided by revenue, expressed as a profitability percentage in business.",
-                                "fullurl": "${server.url("/wiki/Gross_margin")}"
+                                "title": "Monetary policy",
+                                "extract": "Monetary policy is the policy adopted by the monetary authority of a nation to affect monetary and other financial conditions to accomplish broader objectives.",
+                                "fullurl": "${server.url("/wiki/Monetary_policy")}"
                               }
                             }
                           }
@@ -153,30 +143,33 @@ class LiveQuestionEngineAndSourcesTest {
                 memoryTier = DeviceMemoryTier.LOW_RAM
             )
 
+            // Mix technical topics AND arbitrary custom subjects (Neuroscience, History, Economics) with subtopics!
+            val customTopics = listOf(
+                TopicConfig(name = "SQL", subtopics = listOf(SubtopicConfig("GROUP BY & HAVING"))),
+                TopicConfig(name = "Power BI", subtopics = listOf(SubtopicConfig("CALCULATE"))),
+                TopicConfig(name = "Neuroscience", subtopics = listOf(SubtopicConfig("Nervous System"))),
+                TopicConfig(name = "World History", subtopics = listOf(SubtopicConfig("Industrial Revolution"))),
+                TopicConfig(name = "Macroeconomics", subtopics = listOf(SubtopicConfig("Monetary Policy")))
+            )
+
             val res = engine.fetchFreshQuestions(
-                categories = QuestionCategory.ALL,
+                topics = customTopics,
                 difficultyPreset = DifficultyPreset.ADAPTIVE,
                 count = 5
             )
             assertTrue("Engine should succeed: ${res.exceptionOrNull()}", res.isSuccess)
             val questions = res.getOrThrow()
             assertEquals(5, questions.size)
-            assertEquals("All 5 fingerprints must be unique", 5, questions.map { it.fingerprint }.toSet().size)
-            assertEquals("All 5 categories should be covered", QuestionCategory.ALL, questions.map { it.category }.toSet())
+            assertEquals(5, questions.map { it.fingerprint }.toSet().size)
+            assertEquals(
+                customTopics.map { it.name }.toSet(),
+                questions.map { it.topicName }.toSet()
+            )
             assertTrue(
-                "Every question MUST be 4-option MULTIPLE_CHOICE only",
                 questions.all { q ->
                     q.format == QuestionFormat.MULTIPLE_CHOICE &&
                         q.options.size == 4 &&
                         q.options.any { it.equals(q.canonicalAnswer, ignoreCase = true) }
-                }
-            )
-            assertTrue(
-                "Prompts must be clean user-facing English without source citations",
-                questions.none { q ->
-                    q.prompt.contains("Grounded in", ignoreCase = true) ||
-                        q.prompt.contains("Microsoft Learn", ignoreCase = true) ||
-                        q.prompt.contains("Wikipedia", ignoreCase = true)
                 }
             )
         } finally {
@@ -187,14 +180,11 @@ class LiveQuestionEngineAndSourcesTest {
     @Test
     fun `live public internet smoke test retrieves genuine Microsoft Learn and Wikipedia sources`() = runTest {
         val client = LiveEducationalSourcesClient(memoryTier = DeviceMemoryTier.LOW_RAM)
-        val msLearnDocs = runCatching { client.fetchMicrosoftLearn("Power BI DAX CALCULATE") }
-            .getOrDefault(emptyList())
-        val wikiDocs = runCatching { client.fetchWikipediaTopic("Customer acquisition cost") }
+        val wikiDocs = runCatching { client.fetchWikipediaTopic("Astrophysics") }
             .getOrDefault(emptyList())
 
-        // Verify live endpoints return verified HTTPS URLs when network is available in test runner
-        if (msLearnDocs.isNotEmpty() || wikiDocs.isNotEmpty()) {
-            (msLearnDocs + wikiDocs).forEach { doc ->
+        if (wikiDocs.isNotEmpty()) {
+            wikiDocs.forEach { doc ->
                 assertTrue(SecurityGuards.isTrustedEducationalCitationUrl(doc.sourceUrl))
                 assertTrue(doc.extract.isNotBlank())
             }

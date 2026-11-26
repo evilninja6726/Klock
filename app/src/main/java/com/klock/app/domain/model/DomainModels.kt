@@ -11,7 +11,8 @@ data class Alarm(
     val enabled: Boolean = true,
     /** ISO day-of-week numbers: 1 = Monday .. 7 = Sunday. Empty = one-shot alarm. */
     val repeatDays: Set<Int> = emptySet(),
-    val categories: Set<QuestionCategory> = QuestionCategory.ALL,
+    /** Selected TopicConfig IDs for this alarm; empty = use all currently enabled user topics. */
+    val selectedTopicIds: Set<String> = emptySet(),
     val difficultyPreset: DifficultyPreset = DifficultyPreset.ADAPTIVE,
     val requiredQuestions: Int = DEFAULT_REQUIRED_QUESTIONS,
     val vibrate: Boolean = true,
@@ -23,6 +24,8 @@ data class Alarm(
 
     companion object {
         const val DEFAULT_REQUIRED_QUESTIONS = 5
+        const val MIN_REQUIRED_QUESTIONS = 1
+        const val MAX_REQUIRED_QUESTIONS = 100
     }
 }
 
@@ -30,10 +33,12 @@ data class Alarm(
 data class AlarmQuestion(
     val fingerprint: String,
     val slotIndex: Int,
-    val category: QuestionCategory,
+    val topicId: String,
+    val topicName: String,
+    val subtopicName: String? = null,
     val difficulty: QuestionDifficulty,
-    val format: QuestionFormat,
-    val provenance: QuestionProvenance,
+    val format: QuestionFormat = QuestionFormat.MULTIPLE_CHOICE,
+    val provenance: QuestionProvenance = QuestionProvenance.SOURCE_GROUNDED_EXTRACTED,
     val prompt: String,
     val codeSnippet: String? = null,
     val options: List<String> = emptyList(),
@@ -43,9 +48,9 @@ data class AlarmQuestion(
     val numericalTarget: Double? = null,
     val numericalTolerance: Double = 0.01,
     val explanation: String,
-    val sourceTitle: String,
-    val sourceProvider: String,
-    val sourceUrl: String,
+    val sourceTitle: String = "",
+    val sourceProvider: String = "",
+    val sourceUrl: String = "",
     val sourceExcerpt: String? = null,
     val fetchedAtMillis: Long
 )
@@ -60,8 +65,8 @@ enum class RetrievalStatus {
 @Serializable
 enum class OverrideReason(val displayName: String) {
     SAFETY_MEDICAL("Safety or Medical Emergency"),
-    ACCESSIBILITY("Accessibility Accommodation"),
-    PROLONGED_OUTAGE("Complete Internet Outage")
+    ACCESSIBILITY("Accessibility Need"),
+    PROLONGED_OUTAGE("No Internet Available")
 }
 
 @Serializable
@@ -97,7 +102,9 @@ data class QuestionHistoryRecord(
     val sessionId: String,
     val alarmId: Long,
     val fingerprint: String,
-    val category: QuestionCategory,
+    val topicId: String,
+    val topicName: String,
+    val subtopicName: String?,
     val difficulty: QuestionDifficulty,
     val format: QuestionFormat,
     val provenance: QuestionProvenance,
@@ -114,8 +121,8 @@ data class QuestionHistoryRecord(
     val answeredAtMillis: Long
 )
 
-data class CategoryPerformanceStat(
-    val category: QuestionCategory,
+data class TopicPerformanceStat(
+    val topicId: String,
     val totalSolved: Int,
     val firstTrySolved: Int,
     val totalWrongAttempts: Int,
@@ -134,13 +141,18 @@ enum class ThemePreference(val displayName: String) {
 data class AppSettings(
     val themePreference: ThemePreference = ThemePreference.SYSTEM,
     val defaultDifficulty: DifficultyPreset = DifficultyPreset.ADAPTIVE,
-    val defaultCategories: Set<QuestionCategory> = QuestionCategory.ALL,
+    /** Starts completely empty on fresh install — populated during onboarding or in Profile & Topics! */
+    val configuredTopics: List<TopicConfig> = emptyList(),
+    val userProfile: UserProfile = UserProfile(),
     val use24HourFormat: Boolean = false,
     val vibrateByDefault: Boolean = true,
     val gradualVolumeRamp: Boolean = false,
     val enableAiSynthesisWhenKeyConfigured: Boolean = false,
     val aiEndpointUrl: String = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-)
+) {
+    val enabledTopics: List<TopicConfig>
+        get() = configuredTopics.filter { it.enabled && it.name.isNotBlank() }
+}
 
 sealed interface AnswerEvaluationResult {
     data class Correct(

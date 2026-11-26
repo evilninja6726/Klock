@@ -1,9 +1,9 @@
 {
   "app/build.gradle.kts": {
-    "mtime": 1795629665.7325878,
-    "seen": 1795696516.837982,
-    "ast_hash": "e5ba6053f17cbb53152dda8af88d84d1",
-    "semantic_hash": "e5ba6053f17cbb53152dda8af88d84d1"
+    "mtime": 1795700684.6932414,
+    "seen": 1795700759.9004722,
+    "ast_hash": "61d89da6b3a15e9e458c1a1dff1ed84e",
+    "semantic_hash": "61d89da6b3a15e9e458c1a1dff1ed84e"
   },
   "app/src/main/java/com/klock/app/KlockApplication.kt": {
     "mtime": 1795630742.6498966,
@@ -12,10 +12,10 @@
     "semantic_hash": "c7fa02a6d8740f062f403d3cfef04f83"
   },
   "app/src/main/java/com/klock/app/MainActivity.kt": {
-    "mtime": 1795697814.4873765,
-    "seen": 1795698043.880785,
-    "ast_hash": "ed69af034b34ad968b7a30dcd2054092",
-    "semantic_hash": "ed69af034b34ad968b7a30dcd2054092"
+    "mtime": 1795700433.8839157,
+    "seen": 1795700759.900476,
+    "ast_hash": "0c30d0a697071be7590a0599de57b7f3",
+    "semantic_hash": "0c30d0a697071be7590a0599de57b7f3"
   },
   "app/src/main/java/com/klock/app/alarm/audio/AlarmAudioController.kt": {
     "mtime": 1795630010.9770937,
@@ -42,16 +42,16 @@
     "semantic_hash": "ad58d5df916db9c229968833870a6850"
   },
   "app/src/main/java/com/klock/app/alarm/service/AlarmRingingService.kt": {
-    "mtime": 1795697817.2080498,
-    "seen": 1795698043.8807878,
-    "ast_hash": "8e0f6732b29505bb2554da2c39c1ff42",
-    "semantic_hash": "8e0f6732b29505bb2554da2c39c1ff42"
+    "mtime": 1795700547.7975218,
+    "seen": 1795700759.900479,
+    "ast_hash": "66f03254846d6ce3088a16f59b8da82b",
+    "semantic_hash": "66f03254846d6ce3088a16f59b8da82b"
   },
   "app/src/main/java/com/klock/app/alarm/session/AlarmSessionCoordinator.kt": {
-    "mtime": 1795697505.0600133,
-    "seen": 1795698043.880789,
-    "ast_hash": "fcbbc9065c25f68e241ca36633554ba0",
-    "semantic_hash": "fcbbc9065c25f68e241ca36633554ba0"
+    "mtime": 1795700132.9431777,
+    "seen": 1795700759.90048,
+    "ast_hash": "77ed6a766c6b279be4b301db1d9788a4",
+    "semantic_hash": "77ed6a766c6b279be4b301db1d9788a4"
   },
   "app/src/main/java/com/klock/app/alarm/worker/AlarmReconcileWorker.kt": {
     "mtime": 1795630016.2874544,
@@ -72,46 +72,46 @@
     "semantic_hash": "22b05d4a32c285d37b617c77bcb1220d"
   },
   "app/src/main/java/com/klock/app/data/local/KlockDatabase.kt": {
-    "mtime": 1795629838.8841467,
-    "seen": 1795696516.8379898,
-    "ast_hash": "98d82f59e736159ce5ffa56a2d3f1f5d",
-    "semantic_hash": "98d82f59e736159ce5ffa56a2d3f1f5d"
+    "mtime": 1795699968.4111035,
+    "seen": 1795700759.900482,
+    "ast_hash": "58ea089a2067accdc3a2ac2e15637aeb",
+    "semantic_hash": "58ea089a2067accdc3a2ac2e15637aeb"
   },
   "app/src/main/java/com/klock/app/data/repository/RepositoryImpls.kt": {
-    "mtime": 1795697560.981832,
-    "seen": 1795698043.880791,
-    "ast_hash": "f6e557e2c1c361dc48bf48944e72fd85",
-    "semantic_hash": "f6e557e2c1c361dc48bf48944e72fd85"
+    "mtime": 1795699969.9850311,
+    "seen": 1795700759.900482,
+    "ast_hash": "8778a1df98775d564bb0d162e5471eec",
+    "semantic_hash": "8778a1df98775d564bb0d162e5471eec"
   },
   "app/src/main/java/com/klock/app/domain/model/DomainModels.kt": {
-    "mtime": 1795697558.9840899,
-    "seen": 1795698043.8807921,
-    "ast_hash": "2416ad1e558c0dc0d9c542a053068fdc",
-    "semantic_hash": "2416ad1e558c0dc0d9c542a053068fdc"
+    "mtime": 1795699964.1063292,
+    "seen": 1795700759.9004831,
+    "ast_hash": "b9273a7c92510415012facfd97e72905",
+    "semantic_hash": "b9273a7c92510415012facfd97e72905"
   },
   "app/src/main/java/com/klock/app/domain/model/QuestionEnums.kt": {
-    "mtime": 1795697557.5313656,
-    "seen": 1795698043.8807921,
-    "ast_hash": "b3276cc3f13707eeb91e470318c51810",
-    "semantic_hash": "b3276cc3f13707eeb91e470318c51810"
+    "mtime": 1795700621.397959,
+    "seen": 1795700759.9004831,
+    "ast_hash": "ab9144b9f7dfd7342bf4fac2496891b8",
+    "semantic_hash": "ab9144b9f7dfd7342bf4fac2496891b8"
   },
   "app/src/main/java/com/klock/app/domain/repository/Repositories.kt": {
-    "mtime": 1795629835.0397475,
-    "seen": 1795696516.837991,
-    "ast_hash": "7dc5eaab9164205b3f3544ae0d17c4ef",
-    "semantic_hash": "7dc5eaab9164205b3f3544ae0d17c4ef"
+    "mtime": 1795699966.061728,
+    "seen": 1795700759.900484,
+    "ast_hash": "21b2527b98b1e4fe7487c4275c867ac3",
+    "semantic_hash": "21b2527b98b1e4fe7487c4275c867ac3"
   },
   "app/src/main/java/com/klock/app/questions/adaptive/AdaptivePlanner.kt": {
-    "mtime": 1795630337.3119102,
-    "seen": 1795696516.837992,
-    "ast_hash": "a0094b21214b52ec38d4a2a4e47bea45",
-    "semantic_hash": "a0094b21214b52ec38d4a2a4e47bea45"
+    "mtime": 1795700129.4041257,
+    "seen": 1795700759.900484,
+    "ast_hash": "bdaf4a4275a435ec2657b31534335121",
+    "semantic_hash": "bdaf4a4275a435ec2657b31534335121"
   },
   "app/src/main/java/com/klock/app/questions/engine/LiveQuestionEngine.kt": {
-    "mtime": 1795697512.6991906,
-    "seen": 1795698043.880794,
-    "ast_hash": "496f1cf256ab24522ede19cc88d4c94c",
-    "semantic_hash": "496f1cf256ab24522ede19cc88d4c94c"
+    "mtime": 1795700130.8452969,
+    "seen": 1795700759.900486,
+    "ast_hash": "60c8b6eec03bd80e60d6339f3d025dda",
+    "semantic_hash": "60c8b6eec03bd80e60d6339f3d025dda"
   },
   "app/src/main/java/com/klock/app/questions/network/LiveEducationalSourcesClient.kt": {
     "mtime": 1795696296.5227726,
@@ -126,28 +126,28 @@
     "semantic_hash": "2dbe45a5a55ea29277892a72be53251f"
   },
   "app/src/main/java/com/klock/app/ui/active/ActiveAlarmActivity.kt": {
-    "mtime": 1795697990.493951,
-    "seen": 1795698043.8807948,
-    "ast_hash": "bf170c50078925e1896235de3c3cb431",
-    "semantic_hash": "bf170c50078925e1896235de3c3cb431"
+    "mtime": 1795700431.8578858,
+    "seen": 1795700759.900487,
+    "ast_hash": "7b1263623ac756b12f10d3a2c275a23c",
+    "semantic_hash": "7b1263623ac756b12f10d3a2c275a23c"
   },
   "app/src/main/java/com/klock/app/ui/components/KlockComponents.kt": {
-    "mtime": 1795697903.3512318,
-    "seen": 1795698043.8807948,
-    "ast_hash": "52b16c29850658385937df62f8a81a4c",
-    "semantic_hash": "52b16c29850658385937df62f8a81a4c"
+    "mtime": 1795700269.6222932,
+    "seen": 1795700759.900488,
+    "ast_hash": "fb1f4dbaf94ef1fb232ab1e4fa29b759",
+    "semantic_hash": "fb1f4dbaf94ef1fb232ab1e4fa29b759"
   },
   "app/src/main/java/com/klock/app/ui/screens/HistoryAndSettingsScreens.kt": {
-    "mtime": 1795697717.299202,
-    "seen": 1795698043.880796,
-    "ast_hash": "fa07d17f2d6c5615fd8a2a666d23c7fb",
-    "semantic_hash": "fa07d17f2d6c5615fd8a2a666d23c7fb"
+    "mtime": 1795700426.321398,
+    "seen": 1795700759.900488,
+    "ast_hash": "00961cb06ef1aeda5c55b0fba46b97af",
+    "semantic_hash": "00961cb06ef1aeda5c55b0fba46b97af"
   },
   "app/src/main/java/com/klock/app/ui/screens/HomeAndEditorScreens.kt": {
-    "mtime": 1795697715.5392275,
-    "seen": 1795698043.880796,
-    "ast_hash": "426e88aca1336190d3aa20e910bc6d06",
-    "semantic_hash": "426e88aca1336190d3aa20e910bc6d06"
+    "mtime": 1795700424.4841928,
+    "seen": 1795700759.9004889,
+    "ast_hash": "17f57e236db89ae1788f003f4fd4fa67",
+    "semantic_hash": "17f57e236db89ae1788f003f4fd4fa67"
   },
   "app/src/main/java/com/klock/app/ui/theme/KlockTheme.kt": {
     "mtime": 1795630743.9847496,
@@ -162,34 +162,34 @@
     "semantic_hash": "40bb4708617a4109857bfc7b5fe10a37"
   },
   "app/src/main/java/com/klock/app/ui/viewmodel/MainViewModel.kt": {
-    "mtime": 1795697597.4293892,
-    "seen": 1795698043.880797,
-    "ast_hash": "995ae1441ce2925d780d52f4ce823604",
-    "semantic_hash": "995ae1441ce2925d780d52f4ce823604"
+    "mtime": 1795700270.8468416,
+    "seen": 1795700759.900491,
+    "ast_hash": "71b04b633413900103c21b0c742b6b38",
+    "semantic_hash": "71b04b633413900103c21b0c742b6b38"
   },
   "app/src/test/java/com/klock/app/AnswerValidatorAndAdaptiveTest.kt": {
-    "mtime": 1795695874.4004838,
-    "seen": 1795696516.837996,
-    "ast_hash": "cf29507ec92d7b14f42ea7abb5ee1fbe",
-    "semantic_hash": "cf29507ec92d7b14f42ea7abb5ee1fbe"
+    "mtime": 1795700549.1263719,
+    "seen": 1795700759.900491,
+    "ast_hash": "e22a7e24b5f32055f0e71da59edc05d3",
+    "semantic_hash": "e22a7e24b5f32055f0e71da59edc05d3"
   },
   "app/src/test/java/com/klock/app/LiveQuestionEngineAndSourcesTest.kt": {
-    "mtime": 1795697904.7882586,
-    "seen": 1795698043.8807979,
-    "ast_hash": "3aae153c6461f8df0494a03d323d2601",
-    "semantic_hash": "3aae153c6461f8df0494a03d323d2601"
+    "mtime": 1795700553.3700879,
+    "seen": 1795700759.900491,
+    "ast_hash": "c499ef7aa97ae90a2d3c4c8d61d2eeb3",
+    "semantic_hash": "c499ef7aa97ae90a2d3c4c8d61d2eeb3"
   },
   "app/src/test/java/com/klock/app/PlatformCompatibilityAndComposeUiTest.kt": {
-    "mtime": 1795697992.9816613,
-    "seen": 1795698043.880799,
-    "ast_hash": "6e22bbd9e41e61581e062d0029c91086",
-    "semantic_hash": "6e22bbd9e41e61581e062d0029c91086"
+    "mtime": 1795700554.7216406,
+    "seen": 1795700759.900492,
+    "ast_hash": "2d3de3a16f83474781a28cae25df445f",
+    "semantic_hash": "2d3de3a16f83474781a28cae25df445f"
   },
   "app/src/test/java/com/klock/app/SessionDismissalAndNetworkResilienceTest.kt": {
-    "mtime": 1795697907.603795,
-    "seen": 1795698043.880799,
-    "ast_hash": "42002284402c861865b9343cadbb4f88",
-    "semantic_hash": "42002284402c861865b9343cadbb4f88"
+    "mtime": 1795700551.0735044,
+    "seen": 1795700759.900492,
+    "ast_hash": "539d05d4e054d4f27e65c0bde2417012",
+    "semantic_hash": "539d05d4e054d4f27e65c0bde2417012"
   },
   "app/src/test/java/com/klock/app/StrixSecurityExploitTest.kt": {
     "mtime": 1795695880.5986364,
@@ -216,10 +216,10 @@
     "semantic_hash": "c9007de88b5b77a944574a3cd9e2f1c6"
   },
   "README.md": {
-    "mtime": 1795696067.4483807,
-    "seen": 1795696516.837999,
-    "ast_hash": "28e45cccb458a39ab667be98ccbc0631",
-    "semantic_hash": "28e45cccb458a39ab667be98ccbc0631"
+    "mtime": 1795700757.0266619,
+    "seen": 1795700759.900495,
+    "ast_hash": "ce1ce22d5e58d4df2d4da3d810c21e65",
+    "semantic_hash": "ce1ce22d5e58d4df2d4da3d810c21e65"
   },
   "strix_runs/phase1_audit/penetration_test_report.md": {
     "mtime": 1795696194.2090778,
@@ -238,5 +238,17 @@
     "seen": 1795696516.838,
     "ast_hash": "c165089ca769a9380c018db8e3978d8e",
     "semantic_hash": "c165089ca769a9380c018db8e3978d8e"
+  },
+  "app/src/main/java/com/klock/app/questions/adaptive/TopicRecommender.kt": {
+    "mtime": 1795700683.380008,
+    "seen": 1795700759.900485,
+    "ast_hash": "046d3b9e32131df9600d8051758d66d2",
+    "semantic_hash": "046d3b9e32131df9600d8051758d66d2"
+  },
+  "app/src/main/java/com/klock/app/ui/screens/OnboardingAndTopicsScreens.kt": {
+    "mtime": 1795700272.252645,
+    "seen": 1795700759.9004889,
+    "ast_hash": "4f3d3837add351f438dbbf29655349be",
+    "semantic_hash": "4f3d3837add351f438dbbf29655349be"
   }
 }

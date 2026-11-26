@@ -1,22 +1,42 @@
 package com.klock.app.domain.model
 
 import kotlinx.serialization.Serializable
+import java.util.Locale
 
 @Serializable
-enum class QuestionCategory(
-    val displayName: String,
-    val shortCode: String
+data class SubtopicConfig(
+    val name: String,
+    val enabled: Boolean = true
+)
+
+@Serializable
+data class TopicConfig(
+    val name: String,
+    val id: String = slugifyTopicId(name),
+    val enabled: Boolean = true,
+    val subtopics: List<SubtopicConfig> = emptyList()
 ) {
-    SQL("SQL", "SQL"),
-    PYTHON("Python", "PY"),
-    POWER_BI("Power BI", "PBI"),
-    MARKETING("Marketing", "MKT"),
-    BUSINESS("Business", "BIZ");
+    val activeSubtopics: List<String>
+        get() = subtopics.filter { it.enabled && it.name.isNotBlank() }.map { it.name.trim() }
 
     companion object {
-        val ALL: Set<QuestionCategory> = entries.toSet()
+        fun slugifyTopicId(rawName: String): String {
+            return rawName.trim()
+                .lowercase(Locale.ROOT)
+                .replace(Regex("[^a-z0-9]+"), "_")
+                .trim('_')
+                .ifBlank { "topic_${System.currentTimeMillis()}" }
+        }
     }
 }
+
+@Serializable
+data class UserProfile(
+    val name: String = "",
+    val age: Int? = null,
+    val currentActivityOrStudy: String = "",
+    val onboardingCompleted: Boolean = false
+)
 
 @Serializable
 enum class QuestionDifficulty(
@@ -43,7 +63,7 @@ enum class DifficultyPreset(
 ) {
     ADAPTIVE(
         "Adaptive",
-        "Starts easy and gets harder across the 5 questions"
+        "Starts easy and gets harder as you go"
     ),
     EASY(
         "Easy",
@@ -59,7 +79,7 @@ enum class DifficultyPreset(
     ),
     EXPERT(
         "Expert",
-        "All 5 questions at maximum difficulty"
+        "All questions at maximum difficulty"
     );
 
     fun baseProgression(count: Int = 5): List<QuestionDifficulty> {
@@ -122,7 +142,7 @@ enum class QuestionProvenance(
 ) {
     DIRECTLY_RETRIEVED(
         "DIRECTLY RETRIEVED",
-        "Retrieved directly from a live educational Q&A or verified dataset endpoint"
+        "Retrieved directly from a live community Q&A or verified dataset endpoint"
     ),
     SOURCE_GROUNDED_EXTRACTED(
         "SOURCE-GROUNDED · LIVE",

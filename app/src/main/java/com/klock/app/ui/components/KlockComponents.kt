@@ -55,7 +55,7 @@ fun MechanicalLockBar(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalKlockPalette.current
-    val safeTotal = requiredCount.coerceIn(1, 15)
+    val safeTotal = requiredCount.coerceIn(1, 100)
     val displayQuestionNumber = (solvedCount + 1).coerceAtMost(safeTotal)
 
     Column(
@@ -85,50 +85,103 @@ fun MechanicalLockBar(
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            for (i in 0 until safeTotal) {
-                val isSolved = i < solvedCount
-                val isCurrent = i == currentIndex && solvedCount < safeTotal
 
-                val fill = when {
-                    isSolved -> palette.verified
-                    isCurrent -> palette.signal
-                    else -> palette.inset
-                }
-                val borderColor = when {
-                    isSolved -> palette.verified
-                    isCurrent -> palette.signal
-                    else -> palette.border
-                }
-                val labelColor = when {
-                    isSolved -> Color.White
-                    isCurrent -> palette.signalOn
-                    else -> palette.inkMuted
-                }
+        if (safeTotal <= 10) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                for (i in 0 until safeTotal) {
+                    val isSolved = i < solvedCount
+                    val isCurrent = i == currentIndex && solvedCount < safeTotal
 
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(24.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(fill)
-                            .border(1.dp, borderColor, RoundedCornerShape(4.dp)),
-                        contentAlignment = Alignment.Center
+                    val fill = when {
+                        isSolved -> palette.verified
+                        isCurrent -> palette.signal
+                        else -> palette.inset
+                    }
+                    val borderColor = when {
+                        isSolved -> palette.verified
+                        isCurrent -> palette.signal
+                        else -> palette.border
+                    }
+                    val labelColor = when {
+                        isSolved -> Color.White
+                        isCurrent -> palette.signalOn
+                        else -> palette.inkMuted
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = if (isSolved) "✓" else "${i + 1}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = labelColor
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(24.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(fill)
+                                .border(1.dp, borderColor, RoundedCornerShape(4.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (isSolved) "✓" else "${i + 1}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = labelColor
+                            )
+                        }
                     }
                 }
+            }
+        } else {
+            val fraction = (solvedCount.toFloat() / safeTotal.toFloat()).coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(palette.inset)
+                    .border(1.dp, palette.border, RoundedCornerShape(4.dp))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction)
+                        .height(10.dp)
+                        .background(if (solvedCount >= safeTotal) palette.verified else palette.signal)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Minimal 3-line hamburger menu button (48x48dp accessible target, zero icon-font bloat).
+ */
+@Composable
+fun HamburgerMenuButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalKlockPalette.current
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = "Open navigation menu" },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            repeat(3) {
+                Box(
+                    modifier = Modifier
+                        .width(20.dp)
+                        .height(2.dp)
+                        .background(palette.inkPrimary)
+                )
             }
         }
     }

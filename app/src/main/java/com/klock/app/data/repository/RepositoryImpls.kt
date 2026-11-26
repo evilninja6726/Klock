@@ -15,21 +15,22 @@ import com.klock.app.core.security.SecurityGuards
 import com.klock.app.data.local.ActiveAlarmSessionEntity
 import com.klock.app.data.local.AlarmDao
 import com.klock.app.data.local.AlarmEntity
-import com.klock.app.data.local.CategoryStatEntity
 import com.klock.app.data.local.QuestionHistoryDao
 import com.klock.app.data.local.QuestionHistoryEntity
 import com.klock.app.data.local.SessionDao
+import com.klock.app.data.local.TopicStatEntity
 import com.klock.app.domain.model.ActiveAlarmSession
 import com.klock.app.domain.model.Alarm
 import com.klock.app.domain.model.AppSettings
-import com.klock.app.domain.model.CategoryPerformanceStat
 import com.klock.app.domain.model.DifficultyPreset
-import com.klock.app.domain.model.QuestionCategory
 import com.klock.app.domain.model.QuestionDifficulty
 import com.klock.app.domain.model.QuestionFormat
 import com.klock.app.domain.model.QuestionHistoryRecord
 import com.klock.app.domain.model.QuestionProvenance
 import com.klock.app.domain.model.ThemePreference
+import com.klock.app.domain.model.TopicConfig
+import com.klock.app.domain.model.TopicPerformanceStat
+import com.klock.app.domain.model.UserProfile
 import com.klock.app.domain.repository.AlarmRepository
 import com.klock.app.domain.repository.QuestionHistoryRepository
 import com.klock.app.domain.repository.SessionRepository
@@ -163,12 +164,12 @@ class QuestionHistoryRepositoryImpl(
     override suspend fun recordQuestionOutcome(record: QuestionHistoryRecord) {
         dao.insert(record.toEntity())
         if (record.solvedCorrectly) {
-            val current = dao.getCategoryStat(record.category.name)
+            val current = dao.getTopicStat(record.topicId)
             val wrongDelta = (record.attemptsTaken - 1).coerceAtLeast(0)
             val firstTryInc = if (record.attemptsTaken <= 1) 1 else 0
             val updated = if (current == null) {
-                CategoryStatEntity(
-                    category = record.category.name,
+                TopicStatEntity(
+                    topicId = record.topicId,
                     totalSolved = 1,
                     firstTrySolved = firstTryInc,
                     totalWrongAttempts = wrongDelta,
@@ -182,22 +183,20 @@ class QuestionHistoryRepositoryImpl(
                     lastAskedAtMillis = maxOf(current.lastAskedAtMillis, record.answeredAtMillis)
                 )
             }
-            dao.upsertCategoryStat(updated)
+            dao.upsertTopicStat(updated)
         }
     }
 
-    override suspend fun getCategoryPerformanceStats(): Map<QuestionCategory, CategoryPerformanceStat> {
-        return dao.getAllCategoryStats().mapNotNull { row ->
-            val cat = runCatching { QuestionCategory.valueOf(row.category) }.getOrNull()
-                ?: return@mapNotNull null
-            cat to CategoryPerformanceStat(
-                category = cat,
+    override suspend fun getTopicPerformanceStats(): Map<String, TopicPerformanceStat> {
+        return dao.getAllTopicStats().associate { row ->
+            row.topicId to TopicPerformanceStat(
+                topicId = row.topicId,
                 totalSolved = row.totalSolved,
                 firstTrySolved = row.firstTrySolved,
                 totalWrongAttempts = row.totalWrongAttempts,
                 lastAskedAtMillis = row.lastAskedAtMillis
             )
-        }.toMap()
+        }
     }
 
     override suspend fun pruneOldFingerprints(keepLatest: Int) {
@@ -206,7 +205,8 @@ class QuestionHistoryRepositoryImpl(
 }
 
 class DataStoreSettingsRepository(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val json: Json = SessionRepositoryImpl.DefaultRepoJson
 ) : SettingsRepository {
 
     constructor(context: Context) : this(context.applicationContext.klockDataStore)
@@ -225,7 +225,8 @@ class DataStoreSettingsRepository(
             val updated = transform(current)
             prefs[KEY_THEME] = updated.themePreference.name
             prefs[KEY_DIFFICULTY] = updated.defaultDifficulty.name
-            prefs[KEY_CATEGORIES] = updated.defaultCategories.joinToString(",") { it.name }
+            prefs[KEY_TOPICS_JSON] = json.encodeToString(updated.configuredTopics)
+            prefs[KEY_USER_PROFILE_JSON] = json.encodeToString(updated.userProfile)
             prefs[KEY_24H] = updated.use24HourFormat
             prefs[KEY_VIBRATE] = updated.vibrateByDefault
             prefs[KEY_GRADUAL_VOLUME] = updated.gradualVolumeRamp
@@ -243,18 +244,18 @@ class DataStoreSettingsRepository(
         val diff = this[KEY_DIFFICULTY]?.let {
             runCatching { DifficultyPreset.valueOf(it) }.getOrNull()
         } ?: DifficultyPreset.ADAPTIVE
-        val cats = this[KEY_CATEGORIES]
-            ?.split(",")
-            ?.mapNotNull { token ->
-                runCatching { QuestionCategory.valueOf(token.trim()) }.getOrNull()
-            }
-            ?.toSet()
-            ?.takeIf { it.isNotEmpty() }
-            ?: QuestionCategory.ALL
+        val topics = this[KEY_TOPICS_JSON]?.let { encoded ->
+            runCatching { json.decodeFromString<List<TopicConfig>>(encoded) }.getOrNull()
+        } ?: emptyList()
+        val profile = this[KEY_USER_PROFILE_JSON]?.let { encoded ->
+            runCatching { json.decodeFromString<UserProfile>(encoded) }.getOrNull()
+        } ?: UserProfile()
+
         return AppSettings(
             themePreference = theme,
             defaultDifficulty = diff,
-            defaultCategories = cats,
+            configuredTopics = topics,
+            userProfile = profile,
             use24HourFormat = this[KEY_24H] ?: false,
             vibrateByDefault = this[KEY_VIBRATE] ?: true,
             gradualVolumeRamp = this[KEY_GRADUAL_VOLUME] ?: false,
@@ -267,7 +268,8 @@ class DataStoreSettingsRepository(
     companion object {
         private val KEY_THEME = stringPreferencesKey("theme_preference")
         private val KEY_DIFFICULTY = stringPreferencesKey("default_difficulty")
-        private val KEY_CATEGORIES = stringPreferencesKey("default_categories")
+        private val KEY_TOPICS_JSON = stringPreferencesKey("configured_topics_json")
+        private val KEY_USER_PROFILE_JSON = stringPreferencesKey("user_profile_json")
         private val KEY_24H = booleanPreferencesKey("use_24h_format")
         private val KEY_VIBRATE = booleanPreferencesKey("vibrate_by_default")
         private val KEY_GRADUAL_VOLUME = booleanPreferencesKey("gradual_volume_ramp")
@@ -276,10 +278,6 @@ class DataStoreSettingsRepository(
     }
 }
 
-/**
- * Optional runtime user-supplied API key store backed by Android Keystore AES256-GCM.
- * No private API keys are ever shipped in source code, BuildConfig, or the APK.
- */
 interface ByokSecretStore {
     fun getApiKey(): String?
     fun setApiKey(apiKey: String?)
@@ -325,7 +323,6 @@ class EncryptedByokSecretStore(context: Context) : ByokSecretStore {
                 else putString(KEY_BYOK_API_KEY, cleaned)
             }.apply()
         } else {
-            // Never fall back to plaintext disk SharedPreferences if Keystore fails!
             volatileFallbackKey = cleaned
         }
     }
@@ -342,12 +339,10 @@ fun AlarmEntity.toDomain(): Alarm {
         .mapNotNull { it.trim().toIntOrNull() }
         .filter { it in 1..7 }
         .toSet()
-    val cats = categoriesCsv.split(",")
-        .mapNotNull { token ->
-            runCatching { QuestionCategory.valueOf(token.trim()) }.getOrNull()
-        }
+    val topicIds = selectedTopicIdsCsv.split(",")
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
         .toSet()
-        .ifEmpty { QuestionCategory.ALL }
     val preset = runCatching { DifficultyPreset.valueOf(difficultyPreset) }
         .getOrDefault(DifficultyPreset.ADAPTIVE)
     return Alarm(
@@ -357,9 +352,12 @@ fun AlarmEntity.toDomain(): Alarm {
         label = label,
         enabled = enabled,
         repeatDays = days,
-        categories = cats,
+        selectedTopicIds = topicIds,
         difficultyPreset = preset,
-        requiredQuestions = requiredQuestions.coerceIn(1, 15),
+        requiredQuestions = requiredQuestions.coerceIn(
+            Alarm.MIN_REQUIRED_QUESTIONS,
+            Alarm.MAX_REQUIRED_QUESTIONS
+        ),
         vibrate = vibrate,
         ringtoneUri = ringtoneUri,
         nextTriggerEpochMillis = nextTriggerEpochMillis,
@@ -374,9 +372,12 @@ fun Alarm.toEntity(): AlarmEntity = AlarmEntity(
     label = label.trim().take(80),
     enabled = enabled,
     repeatDaysCsv = repeatDays.filter { it in 1..7 }.sorted().joinToString(","),
-    categoriesCsv = categories.ifEmpty { QuestionCategory.ALL }.joinToString(",") { it.name },
+    selectedTopicIdsCsv = selectedTopicIds.map { it.trim() }.filter { it.isNotBlank() }.joinToString(","),
     difficultyPreset = difficultyPreset.name,
-    requiredQuestions = requiredQuestions.coerceIn(1, 15),
+    requiredQuestions = requiredQuestions.coerceIn(
+        Alarm.MIN_REQUIRED_QUESTIONS,
+        Alarm.MAX_REQUIRED_QUESTIONS
+    ),
     vibrate = vibrate,
     ringtoneUri = ringtoneUri,
     nextTriggerEpochMillis = nextTriggerEpochMillis,
@@ -388,9 +389,11 @@ fun QuestionHistoryEntity.toDomain(): QuestionHistoryRecord = QuestionHistoryRec
     sessionId = sessionId,
     alarmId = alarmId,
     fingerprint = fingerprint,
-    category = runCatching { QuestionCategory.valueOf(category) }.getOrDefault(QuestionCategory.SQL),
+    topicId = topicId,
+    topicName = topicName,
+    subtopicName = subtopicName,
     difficulty = runCatching { QuestionDifficulty.valueOf(difficulty) }.getOrDefault(QuestionDifficulty.MEDIUM),
-    format = runCatching { QuestionFormat.valueOf(format) }.getOrDefault(QuestionFormat.SHORT_TEXT),
+    format = runCatching { QuestionFormat.valueOf(format) }.getOrDefault(QuestionFormat.MULTIPLE_CHOICE),
     provenance = runCatching { QuestionProvenance.valueOf(provenance) }.getOrDefault(QuestionProvenance.SOURCE_GROUNDED_EXTRACTED),
     prompt = prompt,
     codeSnippet = codeSnippet,
@@ -410,7 +413,9 @@ fun QuestionHistoryRecord.toEntity(): QuestionHistoryEntity = QuestionHistoryEnt
     sessionId = sessionId,
     alarmId = alarmId,
     fingerprint = fingerprint,
-    category = category.name,
+    topicId = topicId,
+    topicName = topicName,
+    subtopicName = subtopicName,
     difficulty = difficulty.name,
     format = format.name,
     provenance = provenance.name,

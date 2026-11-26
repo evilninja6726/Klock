@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,7 +31,6 @@ import androidx.compose.ui.unit.dp
 import com.klock.app.core.device.OemCompatibilityAdvisor
 import com.klock.app.domain.model.AppSettings
 import com.klock.app.domain.model.DifficultyPreset
-import com.klock.app.domain.model.QuestionCategory
 import com.klock.app.domain.model.QuestionHistoryRecord
 import com.klock.app.domain.model.ThemePreference
 import com.klock.app.ui.components.CodeWorkbenchBlock
@@ -87,6 +85,12 @@ fun QuestionHistorySection(
             }
         } else {
             items(items = history, key = { it.id }) { item ->
+                val topicLabel = if (!item.subtopicName.isNullOrBlank()) {
+                    "${item.topicName} · ${item.subtopicName}"
+                } else {
+                    item.topicName
+                }
+
                 HairlineCard {
                     Column(
                         modifier = Modifier
@@ -99,7 +103,7 @@ fun QuestionHistorySection(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TechnicalTag(text = item.category.displayName, highlighted = true)
+                            TechnicalTag(text = topicLabel, highlighted = true)
                             Text(
                                 text = dateFormatter.format(Date(item.answeredAtMillis)),
                                 style = MaterialTheme.typography.bodyMedium,
@@ -143,7 +147,7 @@ fun SettingsSection(
     settings: AppSettings,
     onUpdateTheme: (ThemePreference) -> Unit,
     onUpdateDefaultDifficulty: (DifficultyPreset) -> Unit,
-    onUpdateDefaultCategories: (Set<QuestionCategory>) -> Unit,
+    onOpenTopicsManager: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
 ) {
@@ -207,7 +211,7 @@ fun SettingsSection(
             }
         }
 
-        // Default Alarm Preferences
+        // Default Difficulty
         item(key = "defaults") {
             HairlineCard {
                 Column(
@@ -242,59 +246,34 @@ fun SettingsSection(
                             }
                         }
                     }
+                }
+            }
+        }
 
-                    HorizontalDivider(color = palette.border)
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Default Topics",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = palette.inkPrimary
-                        )
-                        if (settings.defaultCategories.size < QuestionCategory.ALL.size) {
-                            Text(
-                                text = "Select all",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = palette.signal,
-                                modifier = Modifier.clickable { onUpdateDefaultCategories(QuestionCategory.ALL) }
-                            )
-                        }
-                    }
-
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        QuestionCategory.entries.forEach { cat ->
-                            val active = cat in settings.defaultCategories
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (active) palette.surface else palette.inset,
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (active) palette.signal else palette.border
-                                ),
-                                modifier = Modifier.clickable {
-                                    if (active && settings.defaultCategories.size > 1) {
-                                        onUpdateDefaultCategories(settings.defaultCategories - cat)
-                                    } else if (!active) {
-                                        onUpdateDefaultCategories(settings.defaultCategories + cat)
-                                    }
-                                }
-                            ) {
-                                Text(
-                                    text = cat.displayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (active) palette.inkPrimary else palette.inkMuted,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                                )
-                            }
-                        }
-                    }
+        // Shortcut to Topics & Profile
+        item(key = "topics_shortcut") {
+            HairlineCard {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Topics & Personal Info",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = palette.inkPrimary
+                    )
+                    Text(
+                        text = "${settings.enabledTopics.size} active topic(s) configured. Add any topic or subtopic anytime.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = palette.inkSecondary
+                    )
+                    TactileSecondaryButton(
+                        text = "Manage Topics & Profile",
+                        onClick = onOpenTopicsManager,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }

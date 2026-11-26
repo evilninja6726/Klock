@@ -2,60 +2,37 @@
 
 **The alarm clock that makes sure your brain is actually awake.**
 
-No snooze button. No sleepy swipe-to-stop. When **Klock** rings, the sound keeps going until you answer **5 fresh multiple-choice questions** fetched live from the internet.
+No snooze button. No sleepy swipe-to-stop. When **Klock** rings, the sound keeps going until you answer **fresh multiple-choice questions** fetched live from the internet — tailored to what *you* study or do.
 
-[![Download Latest APK](https://img.shields.io/badge/Download_APK-v1.0.0_(1.9_MB)-D94E1F?style=for-the-badge&logo=android&logoColor=white)](https://github.com/evilninja6726/Klock/releases/download/v1.0.0/Klock-v1.0.0.apk)
+[![Download Latest APK](https://img.shields.io/badge/Download_APK-v1.1.0-D94E1F?style=for-the-badge&logo=android&logoColor=white)](https://github.com/evilninja6726/Klock/releases/download/v1.1.0/Klock-v1.1.0.apk)
 [![Latest Release](https://img.shields.io/badge/GitHub-Releases-141413?style=for-the-badge&logo=github&logoColor=white)](https://github.com/evilninja6726/Klock/releases/latest)
 
 ---
 
 ## ✨ How It Works
 
-1. **Set your alarm** — Pick your wake-up time in simple 12-hour `AM`/`PM` format, choose repeat days, and pick the topics you want to practice.
-2. **Wake up to live questions** — As soon as your alarm goes off, Klock fetches 5 fresh multiple-choice questions from the internet so you never memorize the same old questions.
-3. **Answer 5 to turn it off** — Pick a wrong option and the choices **shuffle automatically** so you can't just tap blindly. Answer the 5th question right and the alarm stops instantly.
+1. **Personalize on First Open** — Enter your name, age, and what you're currently studying or working on. Klock suggests relevant topics right away — with **nothing pre-selected beforehand**.
+2. **Add Any Topic & Subtopic** — Studying *SQL Joins*, *Medical Physiology*, *World History*, *MBA Finance*, *UPSC*, or *Astrophysics*? Add **any topic and subtopics** from any field anytime from the **Topics & Profile** menu.
+3. **Set Your Alarm (5 to 100 Questions)** — Pick your wake-up time in 12-hour `AM`/`PM` format and choose anywhere from **5** (default) up to **100** questions.
+4. **Answer to Wake Up** — Wrong answers **shuffle the 4 choices automatically** so you can't tap blindly. Finish the final question to silence the alarm and get your personalized *"Good morning, [Name]!"* greeting.
 
 ---
 
-## 📚 Pick Your Topics
+## 🎯 Key Highlights
 
-Choose all topics or focus only on what you're learning right now:
-
-| Topic | What You'll Practice |
-| :--- | :--- |
-| **SQL** | Queries, joins, grouping, filtering, and core database concepts |
-| **Python** | Code output prediction, lists, dictionaries, and everyday syntax |
-| **Power BI** | DAX functions, measures, filters, and data modeling |
-| **Marketing** | Conversion rates, customer acquisition cost, funnels, and strategy |
-| **Business** | Profit margins, ROI, finance basics, and decision-making |
-
----
-
-## 🎯 Why Klock Feels Different
-
-- **Zero Snooze Traps** — There is no snooze or ordinary stop button on the ringing screen.
-- **Smart Difficulty** — Choose *Easy*, *Normal*, *Hard*, *Expert*, or *Adaptive* (starts gentle on Question 1 and gets sharper by Question 5).
-- **Anti-Guessing Shuffle** — Wrong answers don't reset your progress, but they reshuffle the 4 options every time so you have to actually read.
-- **Clean, Calm Design** — Crisp Light and Dark modes built to be easy on your eyes at 6:00 AM, without flashy clutter.
-- **Ultra-Lightweight (`1.9 MB`)** — Runs smoothly on older budget phones (2 GB RAM, Android 6.0+) as well as modern flagships.
-- **Emergency Stop Built In** — Caught in an emergency or completely offline? Hold the safety stop for 8 seconds to silence the alarm.
+- **Any Domain, Any Subject** — Flexible **Topics & Subtopics** configuration that works for coding, data, business, medicine, law, exams, science, arts, or any custom interest.
+- **Clean Slide-Out Menu** — Tap the top-left `☰` menu to slide between *Alarms*, *Topics & Profile*, *History*, and *Settings*.
+- **5 to 100 Questions** — Default is 5 questions, adjustable up to 100 per alarm with fast progressive loading.
+- **Anti-Guessing Shuffle** — Every wrong tap reorders the multiple-choice options.
+- **Ultra-Minimal & Tiny (~1.9 MB)** — Built to feel clean and run effortlessly on everything from 2 GB RAM budget phones (Android 6.0+) to modern flagships.
+- **Emergency Stop Included** — Hold the safety stop for 8 seconds if you're in an emergency or offline.
 
 ---
 
 ## 📲 Install on Your Android Phone
 
-1. Tap **[Download Klock v1.0.0 APK](https://github.com/evilninja6726/Klock/releases/download/v1.0.0/Klock-v1.0.0.apk)** on your phone (or open the **[Releases](https://github.com/evilninja6726/Klock/releases)** tab).
-2. Open the downloaded `.apk` file and tap **Install**.
-3. Open **Klock**, allow notification/alarm permissions if prompted, and tap **+ Add Alarm**.
+1. Tap **[Download Klock v1.1.0 APK](https://github.com/evilninja6726/Klock/releases/download/v1.1.0/Klock-v1.1.0.apk)** on your phone (or open **[Releases](https://github.com/evilninja6726/Klock/releases/latest)**).
+2. Open the downloaded `.apk` file and tap **Install** (or **Update** if you already have `v1.0.0`).
+3. Open **Klock**, enter your name and interests, and set your first alarm!
 
-> **Tip for Xiaomi, Samsung, and Realme/OnePlus phones:** Tap **Settings → Battery & Notification Settings** inside Klock and set battery usage to *Unrestricted* (and enable *Autostart / Show on Lock screen* on Xiaomi) so overnight battery savers never delay your morning alarm.
-
----
-
-## 🛠️ Build From Source (Optional)
-
-If you want to build the app yourself on a computer with JDK 21 and the Android SDK:
-
-```bash
-./gradlew assembleRelease
-```
+> **Tip for Xiaomi, Samsung, and Realme/OnePlus phones:** Open the `☰` menu → **Settings → Battery & Notification Settings** and set battery usage to *Unrestricted* (plus *Autostart / Show on Lock screen* on Xiaomi) so overnight battery savers never delay your alarm.

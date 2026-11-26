@@ -7,43 +7,44 @@ import com.klock.app.KlockAppContainer
 import com.klock.app.alarm.scheduler.AlarmScheduler
 import com.klock.app.alarm.scheduler.AlarmTimeCalculator
 import com.klock.app.core.device.DeviceHardwareProfile
-import com.klock.app.core.device.OemGuidance
-import com.klock.app.data.repository.ByokSecretStore
 import com.klock.app.domain.model.ActiveAlarmSession
 import com.klock.app.domain.model.Alarm
 import com.klock.app.domain.model.AppSettings
-import com.klock.app.domain.model.CategoryPerformanceStat
 import com.klock.app.domain.model.DifficultyPreset
-import com.klock.app.domain.model.QuestionCategory
 import com.klock.app.domain.model.QuestionHistoryRecord
+import com.klock.app.domain.model.SubtopicConfig
 import com.klock.app.domain.model.ThemePreference
+import com.klock.app.domain.model.TopicConfig
+import com.klock.app.domain.model.UserProfile
 import com.klock.app.domain.repository.AlarmRepository
 import com.klock.app.domain.repository.QuestionHistoryRepository
 import com.klock.app.domain.repository.SessionRepository
 import com.klock.app.domain.repository.SettingsRepository
+import com.klock.app.questions.adaptive.TopicRecommender
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class TopTab(val label: String) {
+enum class DrawerSection(val label: String) {
     ALARMS("Alarms"),
+    TOPICS_AND_PROFILE("Topics & Profile"),
     HISTORY("History"),
     SETTINGS("Settings")
 }
 
 data class MainUiState(
-    val selectedTab: TopTab = TopTab.ALARMS,
+    val isInitialized: Boolean = false,
+    val selectedSection: DrawerSection = DrawerSection.ALARMS,
     val alarms: List<Alarm> = emptyList(),
     val activeSession: ActiveAlarmSession? = null,
     val lastCompletedSession: ActiveAlarmSession? = null,
     val showCompletionBanner: Boolean = false,
     val history: List<QuestionHistoryRecord> = emptyList(),
-    val categoryStats: Map<QuestionCategory, CategoryPerformanceStat> = emptyMap(),
     val settings: AppSettings = AppSettings(),
-    val hasByokApiKey: Boolean = false,
     val editingAlarm: Alarm? = null,
     val isEditorOpen: Boolean = false
 )
@@ -53,71 +54,205 @@ class MainViewModel(
     private val sessionRepository: SessionRepository,
     private val historyRepository: QuestionHistoryRepository,
     private val settingsRepository: SettingsRepository,
-    private val secretStore: ByokSecretStore,
     private val alarmScheduler: AlarmScheduler,
     val hardwareProfile: DeviceHardwareProfile
 ) : ViewModel() {
 
-    private val selectedTab = MutableStateFlow(TopTab.ALARMS)
+    private val selectedSection = MutableStateFlow(DrawerSection.ALARMS)
     private val editorState = MutableStateFlow<Pair<Boolean, Alarm?>>(false to null)
-    private val byokFlag = MutableStateFlow(secretStore.hasApiKey())
-    private val statsState = MutableStateFlow<Map<QuestionCategory, CategoryPerformanceStat>>(emptyMap())
     private val dismissedCompletionId = MutableStateFlow<String?>(null)
+
+    private val loadedSettingsFlow = settingsRepository.settingsFlow.map { true to it }
 
     val uiState: StateFlow<MainUiState> = combine(
         combine(
-            selectedTab,
+            selectedSection,
             alarmRepository.observeAlarms(),
             sessionRepository.observeActiveSession(),
             sessionRepository.observeCompletedSession("")
-        ) { tab, alarms, active, lastCompleted ->
-            Quad(tab, alarms, active, lastCompleted)
+        ) { section, alarms, active, lastCompleted ->
+            Quad(section, alarms, active, lastCompleted)
         },
         combine(
             historyRepository.observeRecentHistory(limit = hardwareProfile.tier.historyRetentionCount),
-            settingsRepository.settingsFlow,
+            loadedSettingsFlow,
             editorState,
-            byokFlag,
-            combine(statsState, dismissedCompletionId) { s, d -> s to d }
-        ) { history, settings, editor, hasKey, statsAndDismissed ->
-            Quint(history, settings, editor, hasKey, statsAndDismissed)
+            dismissedCompletionId
+        ) { history, loadedSettings, editor, dismissedId ->
+            Quad(history, loadedSettings, editor, dismissedId)
         }
     ) { q1, q2 ->
         val completed = q1.d
-        val showCompleted = completed != null && completed.sessionId != q2.e.second
+        val showCompleted = completed != null && completed.sessionId != q2.d
         MainUiState(
-            selectedTab = q1.a,
+            isInitialized = q2.b.first,
+            selectedSection = q1.a,
             alarms = q1.b,
             activeSession = q1.c,
             lastCompletedSession = completed,
             showCompletionBanner = showCompleted,
             history = q2.a,
-            categoryStats = q2.e.first,
-            settings = q2.b,
-            hasByokApiKey = q2.d,
+            settings = q2.b.second,
             isEditorOpen = q2.c.first,
             editingAlarm = q2.c.second
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000L),
-        initialValue = MainUiState(hasByokApiKey = secretStore.hasApiKey())
+        initialValue = MainUiState(isInitialized = false)
     )
 
-    init {
-        refreshCategoryStats()
+    fun selectSection(section: DrawerSection) {
+        selectedSection.value = section
     }
 
-    fun selectTab(tab: TopTab) {
-        selectedTab.value = tab
-        if (tab == TopTab.HISTORY) {
-            refreshCategoryStats()
+    fun completeOnboarding(
+        name: String,
+        age: Int?,
+        activityOrStudy: String,
+        chosenTopics: List<TopicConfig>
+    ) {
+        val cleanedTopics = chosenTopics
+            .filter { it.name.isNotBlank() }
+            .distinctBy { it.id }
+            .ifEmpty { TopicRecommender.recommendTopics(activityOrStudy, age) }
+
+        viewModelScope.launch {
+            settingsRepository.updateSettings { current ->
+                current.copy(
+                    userProfile = UserProfile(
+                        name = name.trim().take(50),
+                        age = age?.coerceIn(5, 120),
+                        currentActivityOrStudy = activityOrStudy.trim().take(80),
+                        onboardingCompleted = true
+                    ),
+                    configuredTopics = cleanedTopics
+                )
+            }
         }
     }
 
-    fun refreshCategoryStats() {
+    fun updateUserProfile(name: String, age: Int?, activityOrStudy: String) {
         viewModelScope.launch {
-            statsState.value = historyRepository.getCategoryPerformanceStats()
+            settingsRepository.updateSettings { current ->
+                current.copy(
+                    userProfile = current.userProfile.copy(
+                        name = name.trim().take(50),
+                        age = age?.coerceIn(5, 120),
+                        currentActivityOrStudy = activityOrStudy.trim().take(80),
+                        onboardingCompleted = true
+                    )
+                )
+            }
+        }
+    }
+
+    fun applySmartTopicSuggestions(activityOrStudy: String, age: Int?) {
+        val suggested = TopicRecommender.recommendTopics(activityOrStudy, age)
+        viewModelScope.launch {
+            settingsRepository.updateSettings { current ->
+                val existingIds = current.configuredTopics.map { it.id }.toSet()
+                val merged = current.configuredTopics + suggested.filterNot { it.id in existingIds }
+                current.copy(configuredTopics = merged)
+            }
+        }
+    }
+
+    fun addCustomTopic(rawTopicName: String) {
+        val trimmed = rawTopicName.trim().take(48)
+        if (trimmed.isBlank()) return
+        val id = TopicConfig.slugifyTopicId(trimmed)
+        viewModelScope.launch {
+            settingsRepository.updateSettings { current ->
+                if (current.configuredTopics.any { it.id == id }) {
+                    current.copy(
+                        configuredTopics = current.configuredTopics.map {
+                            if (it.id == id) it.copy(enabled = true) else it
+                        }
+                    )
+                } else {
+                    current.copy(
+                        configuredTopics = current.configuredTopics + TopicConfig(
+                            id = id,
+                            name = trimmed,
+                            enabled = true,
+                            subtopics = emptyList()
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun toggleTopic(topicId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.updateSettings { current ->
+                current.copy(
+                    configuredTopics = current.configuredTopics.map {
+                        if (it.id == topicId) it.copy(enabled = enabled) else it
+                    }
+                )
+            }
+        }
+    }
+
+    fun removeTopic(topicId: String) {
+        viewModelScope.launch {
+            settingsRepository.updateSettings { current ->
+                current.copy(
+                    configuredTopics = current.configuredTopics.filterNot { it.id == topicId }
+                )
+            }
+        }
+    }
+
+    fun addSubtopic(topicId: String, rawSubtopicName: String) {
+        val trimmed = rawSubtopicName.trim().take(48)
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            settingsRepository.updateSettings { current ->
+                current.copy(
+                    configuredTopics = current.configuredTopics.map { topic ->
+                        if (topic.id != topicId) topic
+                        else if (topic.subtopics.any { it.name.equals(trimmed, ignoreCase = true) }) topic
+                        else topic.copy(
+                            subtopics = topic.subtopics + SubtopicConfig(name = trimmed, enabled = true)
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    fun toggleSubtopic(topicId: String, subtopicName: String, enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.updateSettings { current ->
+                current.copy(
+                    configuredTopics = current.configuredTopics.map { topic ->
+                        if (topic.id != topicId) topic
+                        else topic.copy(
+                            subtopics = topic.subtopics.map { sub ->
+                                if (sub.name == subtopicName) sub.copy(enabled = enabled) else sub
+                            }
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    fun removeSubtopic(topicId: String, subtopicName: String) {
+        viewModelScope.launch {
+            settingsRepository.updateSettings { current ->
+                current.copy(
+                    configuredTopics = current.configuredTopics.map { topic ->
+                        if (topic.id != topicId) topic
+                        else topic.copy(
+                            subtopics = topic.subtopics.filterNot { it.name == subtopicName }
+                        )
+                    }
+                )
+            }
         }
     }
 
@@ -130,7 +265,7 @@ class MainViewModel(
             label = "",
             enabled = true,
             repeatDays = setOf(1, 2, 3, 4, 5),
-            categories = currentSettings.defaultCategories,
+            selectedTopicIds = emptySet(), // empty = use all active user topics
             difficultyPreset = currentSettings.defaultDifficulty,
             requiredQuestions = Alarm.DEFAULT_REQUIRED_QUESTIONS,
             vibrate = currentSettings.vibrateByDefault
@@ -148,10 +283,11 @@ class MainViewModel(
 
     fun saveAlarm(draft: Alarm) {
         viewModelScope.launch {
-            val safeCategories = draft.categories.ifEmpty { QuestionCategory.ALL }
             val cleaned = draft.copy(
-                categories = safeCategories,
-                requiredQuestions = draft.requiredQuestions.coerceIn(1, 15)
+                requiredQuestions = draft.requiredQuestions.coerceIn(
+                    Alarm.MIN_REQUIRED_QUESTIONS,
+                    Alarm.MAX_REQUIRED_QUESTIONS
+                )
             )
             val persistedId = alarmRepository.upsertAlarm(cleaned)
             val withId = cleaned.copy(id = persistedId)
@@ -196,34 +332,10 @@ class MainViewModel(
         }
     }
 
-    fun updateUse24Hour(use24Hour: Boolean) {
-        viewModelScope.launch {
-            settingsRepository.updateSettings { it.copy(use24HourFormat = use24Hour) }
-        }
-    }
-
     fun updateDefaultDifficulty(preset: DifficultyPreset) {
         viewModelScope.launch {
             settingsRepository.updateSettings { it.copy(defaultDifficulty = preset) }
         }
-    }
-
-    fun updateDefaultCategories(categories: Set<QuestionCategory>) {
-        if (categories.isEmpty()) return
-        viewModelScope.launch {
-            settingsRepository.updateSettings { it.copy(defaultCategories = categories) }
-        }
-    }
-
-    fun updateAiSynthesisEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsRepository.updateSettings { it.copy(enableAiSynthesisWhenKeyConfigured = enabled) }
-        }
-    }
-
-    fun saveByokApiKey(rawKey: String?) {
-        secretStore.setApiKey(rawKey)
-        byokFlag.value = secretStore.hasApiKey()
     }
 
     fun nextScheduledSummary(alarms: List<Alarm>): String {
@@ -240,7 +352,6 @@ class MainViewModel(
     }
 
     private data class Quad<A, B, C, D>(val a: A, val b: B, val c: C, val d: D)
-    private data class Quint<A, B, C, D, E>(val a: A, val b: B, val c: C, val d: D, val e: E)
 
     companion object {
         fun factory(container: KlockAppContainer): ViewModelProvider.Factory =
@@ -252,7 +363,6 @@ class MainViewModel(
                         sessionRepository = container.sessionRepository,
                         historyRepository = container.historyRepository,
                         settingsRepository = container.settingsRepository,
-                        secretStore = container.secretStore,
                         alarmScheduler = container.alarmScheduler,
                         hardwareProfile = container.hardwareProfile
                     ) as T

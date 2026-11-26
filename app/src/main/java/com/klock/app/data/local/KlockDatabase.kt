@@ -25,7 +25,7 @@ data class AlarmEntity(
     val label: String,
     val enabled: Boolean,
     val repeatDaysCsv: String,
-    val categoriesCsv: String,
+    val selectedTopicIdsCsv: String,
     val difficultyPreset: String,
     val requiredQuestions: Int,
     val vibrate: Boolean,
@@ -53,7 +53,7 @@ data class ActiveAlarmSessionEntity(
     indices = [
         Index(value = ["fingerprint"]),
         Index(value = ["answeredAtMillis"]),
-        Index(value = ["category"])
+        Index(value = ["topicId"])
     ]
 )
 data class QuestionHistoryEntity(
@@ -61,7 +61,9 @@ data class QuestionHistoryEntity(
     val sessionId: String,
     val alarmId: Long,
     val fingerprint: String,
-    val category: String,
+    val topicId: String,
+    val topicName: String,
+    val subtopicName: String?,
     val difficulty: String,
     val format: String,
     val provenance: String,
@@ -78,9 +80,9 @@ data class QuestionHistoryEntity(
     val answeredAtMillis: Long
 )
 
-@Entity(tableName = "category_stats")
-data class CategoryStatEntity(
-    @PrimaryKey val category: String,
+@Entity(tableName = "topic_stats")
+data class TopicStatEntity(
+    @PrimaryKey val topicId: String,
     val totalSolved: Int,
     val firstTrySolved: Int,
     val totalWrongAttempts: Int,
@@ -153,14 +155,14 @@ interface QuestionHistoryDao {
     )
     suspend fun pruneOld(keepLatest: Int)
 
-    @Query("SELECT * FROM category_stats")
-    suspend fun getAllCategoryStats(): List<CategoryStatEntity>
+    @Query("SELECT * FROM topic_stats")
+    suspend fun getAllTopicStats(): List<TopicStatEntity>
 
-    @Query("SELECT * FROM category_stats WHERE category = :category LIMIT 1")
-    suspend fun getCategoryStat(category: String): CategoryStatEntity?
+    @Query("SELECT * FROM topic_stats WHERE topicId = :topicId LIMIT 1")
+    suspend fun getTopicStat(topicId: String): TopicStatEntity?
 
     @Upsert
-    suspend fun upsertCategoryStat(entity: CategoryStatEntity)
+    suspend fun upsertTopicStat(entity: TopicStatEntity)
 }
 
 @Database(
@@ -168,9 +170,9 @@ interface QuestionHistoryDao {
         AlarmEntity::class,
         ActiveAlarmSessionEntity::class,
         QuestionHistoryEntity::class,
-        CategoryStatEntity::class
+        TopicStatEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class KlockDatabase : RoomDatabase() {

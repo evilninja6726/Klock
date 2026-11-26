@@ -1,16 +1,21 @@
 package com.klock.app
 
+import com.klock.app.domain.model.Alarm
 import com.klock.app.domain.model.AlarmQuestion
+import com.klock.app.domain.model.AnswerEvaluationResult
+import com.klock.app.domain.model.AppSettings
 import com.klock.app.domain.model.DifficultyPreset
-import com.klock.app.domain.model.QuestionCategory
 import com.klock.app.domain.model.QuestionDifficulty
 import com.klock.app.domain.model.QuestionFormat
 import com.klock.app.domain.model.QuestionProvenance
+import com.klock.app.domain.model.SubtopicConfig
+import com.klock.app.domain.model.TopicConfig
+import com.klock.app.domain.model.TopicPerformanceStat
 import com.klock.app.questions.adaptive.AdaptivePlanner
+import com.klock.app.questions.adaptive.TopicRecommender
 import com.klock.app.questions.validation.AnswerValidator
-import com.klock.app.domain.model.AnswerEvaluationResult
-import com.klock.app.domain.model.CategoryPerformanceStat
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -19,23 +24,33 @@ class AnswerValidatorAndAdaptiveTest {
     private val validator = AnswerValidator()
 
     @Test
-    fun `supported categories contain strictly SQL Python PowerBI Marketing and Business`() {
-        val expected = setOf(
-            QuestionCategory.SQL,
-            QuestionCategory.PYTHON,
-            QuestionCategory.POWER_BI,
-            QuestionCategory.MARKETING,
-            QuestionCategory.BUSINESS
-        )
-        assertEquals(expected, QuestionCategory.ALL)
-        assertEquals(5, QuestionCategory.entries.size)
+    fun `fresh install has zero default topics and default 5 questions up to max 100`() {
+        val freshSettings = AppSettings()
+        assertTrue("No default topics should exist before onboarding", freshSettings.configuredTopics.isEmpty())
+        assertFalse(freshSettings.userProfile.onboardingCompleted)
+        assertEquals(5, Alarm.DEFAULT_REQUIRED_QUESTIONS)
+        assertEquals(100, Alarm.MAX_REQUIRED_QUESTIONS)
+        assertEquals(5, Alarm(hour = 7, minute = 0).requiredQuestions)
+    }
+
+    @Test
+    fun `TopicRecommender suggests domain topics with subtopics and supports completely custom fields`() {
+        val dataSuggestions = TopicRecommender.recommendTopics("Data & Analytics", age = 23)
+        assertTrue(dataSuggestions.any { it.name == "SQL" && it.subtopics.isNotEmpty() })
+        assertTrue(dataSuggestions.any { it.name == "Power BI" })
+
+        val medSuggestions = TopicRecommender.recommendTopics("MBBS Medicine", age = 21)
+        assertTrue(medSuggestions.any { it.name.contains("Physiology", ignoreCase = true) })
+
+        val customSuggestions = TopicRecommender.recommendTopics("Astrophysics, Jazz Theory", age = 29)
+        assertEquals(listOf("Astrophysics", "Jazz Theory"), customSuggestions.map { it.name })
     }
 
     @Test
     fun `multiple choice accepts exact text case insensitively and option letter`() {
         val q = sampleQuestion(
             format = QuestionFormat.MULTIPLE_CHOICE,
-            category = QuestionCategory.POWER_BI,
+            topicName = "Power BI",
             options = listOf("SUM", "CALCULATE", "RELATED", "EARLIER"),
             canonical = "CALCULATE"
         )
@@ -45,92 +60,38 @@ class AnswerValidatorAndAdaptiveTest {
     }
 
     @Test
-    fun `sql query validation handles formatting tolerance and blocks injected destructive DDL`() {
-        val q = sampleQuestion(
-            format = QuestionFormat.SQL_QUERY,
-            category = QuestionCategory.SQL,
-            canonical = "SELECT customer_id, SUM(amount) FROM orders GROUP BY customer_id HAVING SUM(amount) > 500",
-            requiredKeywords = listOf(
-                "SELECT", "customer_id", "SUM(amount)", "FROM orders",
-                "GROUP BY customer_id", "HAVING", "SUM(amount)", "500"
+    fun `adaptive planner rotates custom topics and subtopics and scales up to 100 questions`() {
+        val planner = AdaptivePlanner()
+        val customTopics = listOf(
+            TopicConfig(
+                name = "SQL",
+                subtopics = listOf(
+                    SubtopicConfig("Joins", enabled = true),
+                    SubtopicConfig("Window Functions", enabled = true),
+                    SubtopicConfig("Disabled Subtopic", enabled = false)
+                )
+            ),
+            TopicConfig(
+                name = "Macroeconomics",
+                subtopics = listOf(SubtopicConfig("Inflation", enabled = true))
             )
         )
-        val formattedQuery = """
-            select `customer_id`, sum(amount)
-            from [orders]
-            group by customer_id
-            having sum(amount) > 500;
-        """.trimIndent()
-        assertTrue(validator.evaluate(q, formattedQuery) is AnswerEvaluationResult.Correct)
 
-        val injectedDrop = "$formattedQuery DROP TABLE orders"
-        assertTrue(validator.evaluate(q, injectedDrop) is AnswerEvaluationResult.Incorrect)
-    }
-
-    @Test
-    fun `python output validation normalizes list whitespace and quotes`() {
-        val q = sampleQuestion(
-            format = QuestionFormat.PYTHON_OUTPUT,
-            category = QuestionCategory.PYTHON,
-            canonical = "[6, 12, 18]"
-        )
-        assertTrue(validator.evaluate(q, "[6,12,18]") is AnswerEvaluationResult.Correct)
-        assertTrue(validator.evaluate(q, "[ 6 , 12 , 18 ]") is AnswerEvaluationResult.Correct)
-        assertTrue(validator.evaluate(q, "[6, 12]") is AnswerEvaluationResult.Incorrect)
-    }
-
-    @Test
-    fun `numerical and scenario validation accepts currency commas percentages and tolerance`() {
-        val q = sampleQuestion(
-            format = QuestionFormat.SCENARIO,
-            category = QuestionCategory.MARKETING,
-            canonical = "45",
-            numericalTarget = 45.0,
-            numericalTolerance = 0.05
-        )
-        assertTrue(validator.evaluate(q, "$45.00") is AnswerEvaluationResult.Correct)
-        assertTrue(validator.evaluate(q, "45%") is AnswerEvaluationResult.Correct)
-        assertTrue(validator.evaluate(q, "45.03") is AnswerEvaluationResult.Correct)
-        assertTrue(validator.evaluate(q, "46") is AnswerEvaluationResult.Incorrect)
-    }
-
-    @Test
-    fun `short text validation tolerates minor typo and leading articles`() {
-        val q = sampleQuestion(
-            format = QuestionFormat.SHORT_TEXT,
-            category = QuestionCategory.BUSINESS,
-            canonical = "Gross margin"
-        )
-        assertTrue(validator.evaluate(q, "the gross margin") is AnswerEvaluationResult.Correct)
-        assertTrue(validator.evaluate(q, "gros margin") is AnswerEvaluationResult.Correct)
-        assertTrue(validator.evaluate(q, "net loss") is AnswerEvaluationResult.Incorrect)
-    }
-
-    @Test
-    fun `adaptive planner produces 5-step progression and distributes across selected categories`() {
-        val planner = AdaptivePlanner()
-        val plan = planner.buildPlan(
-            selectedCategories = QuestionCategory.ALL,
+        val plan100 = planner.buildPlan(
+            topics = customTopics,
             preset = DifficultyPreset.ADAPTIVE,
-            count = 5
+            count = 100
         )
-        assertEquals(5, plan.size)
-        assertEquals(
-            listOf(
-                QuestionDifficulty.EASY,
-                QuestionDifficulty.EASY_MEDIUM,
-                QuestionDifficulty.MEDIUM,
-                QuestionDifficulty.MEDIUM_HARD,
-                QuestionDifficulty.HARD
-            ),
-            plan.map { it.difficulty }
-        )
-        assertEquals(5, plan.map { it.category }.toSet().size)
+        assertEquals(100, plan100.size)
+        assertEquals(QuestionDifficulty.EASY, plan100.first().difficulty)
+        assertEquals(QuestionDifficulty.HARD, plan100.last().difficulty)
 
-        // High-accuracy history shifts adaptive difficulty harder on later slots
+        val sqlSubtopicsUsed = plan100.filter { it.topic.name == "SQL" }.mapNotNull { it.subtopicName }.toSet()
+        assertEquals(setOf("Joins", "Window Functions"), sqlSubtopicsUsed)
+
         val masteredStats = mapOf(
-            QuestionCategory.SQL to CategoryPerformanceStat(
-                category = QuestionCategory.SQL,
+            "sql" to TopicPerformanceStat(
+                topicId = "sql",
                 totalSolved = 10,
                 firstTrySolved = 10,
                 totalWrongAttempts = 0,
@@ -138,7 +99,7 @@ class AnswerValidatorAndAdaptiveTest {
             )
         )
         val tunedPlan = planner.buildPlan(
-            selectedCategories = setOf(QuestionCategory.SQL),
+            topics = listOf(customTopics.first()),
             preset = DifficultyPreset.ADAPTIVE,
             count = 5,
             stats = masteredStats
@@ -149,25 +110,20 @@ class AnswerValidatorAndAdaptiveTest {
 
     private fun sampleQuestion(
         format: QuestionFormat,
-        category: QuestionCategory,
+        topicName: String,
         canonical: String,
-        options: List<String> = emptyList(),
-        requiredKeywords: List<String> = emptyList(),
-        numericalTarget: Double? = null,
-        numericalTolerance: Double = 0.01
+        options: List<String> = emptyList()
     ): AlarmQuestion = AlarmQuestion(
         fingerprint = "fp_${format.name}",
         slotIndex = 0,
-        category = category,
+        topicId = TopicConfig.slugifyTopicId(topicName),
+        topicName = topicName,
         difficulty = QuestionDifficulty.MEDIUM,
         format = format,
         provenance = QuestionProvenance.SOURCE_GROUNDED_EXTRACTED,
         prompt = "Sample prompt",
         options = options,
         canonicalAnswer = canonical,
-        requiredKeywords = requiredKeywords,
-        numericalTarget = numericalTarget,
-        numericalTolerance = numericalTolerance,
         explanation = "Verified explanation",
         sourceTitle = "Reference Title",
         sourceProvider = "Microsoft Learn",
